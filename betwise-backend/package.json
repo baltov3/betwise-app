@@ -1,4 +1,16 @@
-"scripts": {
-  "dev": "nodemon src/server.js",
-  "prisma": "prisma"
+{
+  "name": "betwise-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "nodemon src/index.ts",
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  }
 }
