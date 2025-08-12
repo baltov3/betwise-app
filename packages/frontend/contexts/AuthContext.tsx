@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api } from 'C:\\Users\\kbaltov\\Documents\\project\\packages\\frontend\\lib\\api';
+import { api } from '../lib/api'; // Adjust the import path as necessary
 
 interface User {
   id: string;

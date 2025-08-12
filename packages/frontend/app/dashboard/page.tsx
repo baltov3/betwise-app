@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import DashboardLayout from '@/components/DashboardLayout';
-import { api } from '@/lib/api';
+import { useAuth } from '../../contexts/AuthContext';
+import DashboardLayout from '../../components/DashboardLayout';
+import { api } from '../../lib/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 

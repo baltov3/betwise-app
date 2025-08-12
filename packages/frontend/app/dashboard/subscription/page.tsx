@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import DashboardLayout from '@/components/DashboardLayout';
-import { api } from '@/lib/api';
+import DashboardLayout from '../../../components/DashboardLayout';
+import { api } from '../../../lib/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
