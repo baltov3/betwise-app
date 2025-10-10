@@ -6,21 +6,61 @@ import { authenticate, requireAdmin, requireSubscription } from '../middleware/a
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Get all predictions (public)
+// Get all predictions with enhanced filtering
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, sport } = req.query;
-    const skip = (page - 1) * limit;
+    const { 
+      page = 1, 
+      pageSize = 10, 
+      category, 
+      status, 
+      from, 
+      to 
+    } = req.query;
+    
+    const skip = (page - 1) * pageSize;
+    const where = {};
 
-    const where = sport ? { sport } : {};
+    // Filter by category slug
+    if (category) {
+      const categoryRecord = await prisma.category.findUnique({
+        where: { slug: category }
+      });
+      if (categoryRecord) {
+        where.categoryId = categoryRecord.id;
+      }
+    }
+
+    // Filter by status
+    if (status) {
+      where.status = status;
+    }
+
+    // Filter by date range
+    if (from || to) {
+      where.scheduledAt = {};
+      if (from) {
+        where.scheduledAt.gte = new Date(from);
+      }
+      if (to) {
+        where.scheduledAt.lte = new Date(to);
+      }
+    }
 
     const [predictions, total] = await Promise.all([
       prisma.prediction.findMany({
         where,
         skip: parseInt(skip),
-        take: parseInt(limit),
-        orderBy: { matchDate: 'asc' },
+        take: parseInt(pageSize),
+        orderBy: { scheduledAt: 'desc' },
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            }
+          },
           creator: {
             select: {
               email: true,
@@ -37,9 +77,9 @@ router.get('/', async (req, res) => {
         predictions,
         pagination: {
           page: parseInt(page),
-          limit: parseInt(limit),
+          pageSize: parseInt(pageSize),
           total,
-          pages: Math.ceil(total / limit)
+          pages: Math.ceil(total / pageSize)
         }
       }
     });
@@ -60,6 +100,13 @@ router.get('/:id', async (req, res) => {
     const prediction = await prisma.prediction.findUnique({
       where: { id },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          }
+        },
         creator: {
           select: {
             email: true,
@@ -90,11 +137,16 @@ router.get('/:id', async (req, res) => {
 
 // Create prediction (admin only)
 router.post('/', authenticate, requireAdmin, [
-  body('sport').notEmpty(),
+  body('categoryId').notEmpty(),
   body('title').notEmpty(),
-  body('description').notEmpty(),
+  body('pick').notEmpty(),
   body('odds').isFloat({ min: 1.01 }),
-  body('matchDate').isISO8601(),
+  body('scheduledAt').isISO8601(),
+  body('league').optional(),
+  body('homeTeam').optional(),
+  body('awayTeam').optional(),
+  body('status').optional().isIn(['UPCOMING', 'WON', 'LOST', 'VOID', 'EXPIRED']),
+  body('resultNote').optional(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -106,18 +158,41 @@ router.post('/', authenticate, requireAdmin, [
       });
     }
 
-    const { sport, title, description, odds, matchDate } = req.body;
+    const { 
+      categoryId, 
+      title, 
+      league, 
+      homeTeam, 
+      awayTeam, 
+      pick, 
+      odds, 
+      scheduledAt,
+      status,
+      resultNote
+    } = req.body;
 
     const prediction = await prisma.prediction.create({
       data: {
-        sport,
+        categoryId,
         title,
-        description,
+        league,
+        homeTeam,
+        awayTeam,
+        pick,
         odds: parseFloat(odds),
-        matchDate: new Date(matchDate),
+        scheduledAt: new Date(scheduledAt),
+        status: status || 'UPCOMING',
+        resultNote,
         createdBy: req.user.id,
       },
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          }
+        },
         creator: {
           select: {
             email: true,
@@ -142,11 +217,16 @@ router.post('/', authenticate, requireAdmin, [
 
 // Update prediction (admin only)
 router.put('/:id', authenticate, requireAdmin, [
-  body('sport').optional().notEmpty(),
+  body('categoryId').optional().notEmpty(),
   body('title').optional().notEmpty(),
-  body('description').optional().notEmpty(),
+  body('pick').optional().notEmpty(),
   body('odds').optional().isFloat({ min: 1.01 }),
-  body('matchDate').optional().isISO8601(),
+  body('scheduledAt').optional().isISO8601(),
+  body('league').optional(),
+  body('homeTeam').optional(),
+  body('awayTeam').optional(),
+  body('status').optional().isIn(['UPCOMING', 'WON', 'LOST', 'VOID', 'EXPIRED']),
+  body('resultNote').optional(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -162,16 +242,28 @@ router.put('/:id', authenticate, requireAdmin, [
     const updateData = {};
 
     // Only include provided fields
-    if (req.body.sport) updateData.sport = req.body.sport;
+    if (req.body.categoryId) updateData.categoryId = req.body.categoryId;
     if (req.body.title) updateData.title = req.body.title;
-    if (req.body.description) updateData.description = req.body.description;
+    if (req.body.league !== undefined) updateData.league = req.body.league;
+    if (req.body.homeTeam !== undefined) updateData.homeTeam = req.body.homeTeam;
+    if (req.body.awayTeam !== undefined) updateData.awayTeam = req.body.awayTeam;
+    if (req.body.pick) updateData.pick = req.body.pick;
     if (req.body.odds) updateData.odds = parseFloat(req.body.odds);
-    if (req.body.matchDate) updateData.matchDate = new Date(req.body.matchDate);
+    if (req.body.scheduledAt) updateData.scheduledAt = new Date(req.body.scheduledAt);
+    if (req.body.status) updateData.status = req.body.status;
+    if (req.body.resultNote !== undefined) updateData.resultNote = req.body.resultNote;
 
     const prediction = await prisma.prediction.update({
       where: { id },
       data: updateData,
       include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          }
+        },
         creator: {
           select: {
             email: true,
@@ -221,6 +313,57 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       });
     }
     console.error('Delete prediction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Maintenance endpoint to expire old predictions (admin only)
+router.post('/maintenance/run', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    
+    const result = await prisma.prediction.updateMany({
+      where: {
+        scheduledAt: {
+          lt: now
+        },
+        status: 'UPCOMING'
+      },
+      data: {
+        status: 'EXPIRED'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Expired ${result.count} predictions`,
+      data: { count: result.count }
+    });
+  } catch (error) {
+    console.error('Maintenance error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get all categories
+router.get('/categories/list', async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { name: 'asc' }
+    });
+
+    res.json({
+      success: true,
+      data: { categories }
+    });
+  } catch (error) {
+    console.error('Get categories error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

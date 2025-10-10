@@ -32,6 +32,18 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PredictionStatus {
+  UPCOMING
+  WON
+  LOST
+  VOID
+  EXPIRED
+}
+
+enum PaymentMethod {
+  stripe
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
@@ -48,6 +60,8 @@ model User {
   referred     Referral[] @relation("Referred")
   predictions  Prediction[]
   payments     Payment[]
+  commissionsEarned CommissionLog[] @relation("CommissionReferrer")
+  commissionsFrom   CommissionLog[] @relation("CommissionReferred")
 
   @@map("users")
 }
@@ -86,37 +100,76 @@ model Referral {
   @@map("referrals")
 }
 
-model Prediction {
+model Category {
   id          String   @id @default(uuid())
-  sport       String
-  title       String
-  description String
-  odds        Float
-  matchDate   DateTime
-  createdBy   String
+  name        String
+  slug        String   @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  creator User @relation(fields: [createdBy], references: [id])
+  predictions Prediction[]
+
+  @@map("categories")
+}
+
+model Prediction {
+  id          String           @id @default(uuid())
+  categoryId  String
+  title       String
+  league      String?
+  homeTeam    String?
+  awayTeam    String?
+  pick        String
+  odds        Decimal
+  scheduledAt DateTime
+  status      PredictionStatus @default(UPCOMING)
+  resultNote  String?
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id])
+  creator  User     @relation(fields: [createdBy], references: [id])
 
   @@map("predictions")
 }
 
 model Payment {
-  id        String        @id @default(uuid())
-  userId    String
-  amount    Float
-  currency  String        @default("usd")
-  method    String
-  date      DateTime      @default(now())
-  status    PaymentStatus @default(PENDING)
-  stripeId  String?       @unique
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id          String        @id @default(uuid())
+  userId      String
+  amount      Decimal
+  currency    String        @default("usd")
+  method      PaymentMethod
+  status      PaymentStatus @default(PENDING)
+  stripeId    String?       @unique
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   // Relations
-  user User @relation(fields: [userId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+  commissions CommissionLog[]
 
   @@map("payments")
+}
+
+model CommissionLog {
+  id             String   @id @default(uuid())
+  referrerId     String
+  referredUserId String
+  fromPaymentId  String
+  amount         Decimal
+  rateApplied    Decimal
+  month          String
+  createdAt      DateTime @default(now())
+
+  // Relations
+  referrer    User    @relation("CommissionReferrer", fields: [referrerId], references: [id])
+  referred    User    @relation("CommissionReferred", fields: [referredUserId], references: [id])
+  fromPayment Payment @relation(fields: [fromPaymentId], references: [id])
+
+  @@map("commission_logs")
 }
