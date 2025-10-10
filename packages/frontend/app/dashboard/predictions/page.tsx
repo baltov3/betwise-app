@@ -6,41 +6,70 @@ import { api } from '../../../lib/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface Prediction {
   id: string;
-  sport: string;
+  categoryId: string;
   title: string;
-  description: string;
-  odds: number;
-  matchDate: string;
+  league?: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  pick: string;
+  odds: string;
+  scheduledAt: string;
+  status: string;
+  resultNote?: string;
+  category?: Category;
   creator: {
     email: string;
   };
 }
 
-const SPORTS_FILTERS = ['All', 'Football', 'Basketball', 'Tennis', 'Soccer', 'Baseball'];
-
 export default function PredictionsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSport, setSelectedSport] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('UPCOMING');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
     fetchPredictions();
-  }, [selectedSport, currentPage]);
+  }, [selectedCategory, selectedStatus, currentPage]);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/predictions/categories/list');
+      setCategories(response.data.data.categories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchPredictions = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
         page: currentPage.toString(),
-        limit: '10',
+        pageSize: '10',
       });
       
-      if (selectedSport !== 'All') {
-        params.append('sport', selectedSport);
+      if (selectedCategory !== 'all') {
+        params.append('category', selectedCategory);
+      }
+
+      if (selectedStatus) {
+        params.append('status', selectedStatus);
       }
 
       const response = await api.get(`/predictions?${params.toString()}`);
@@ -54,6 +83,17 @@ export default function PredictionsPage() {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    const colors: Record<string, string> = {
+      UPCOMING: 'bg-blue-100 text-blue-800',
+      WON: 'bg-green-100 text-green-800',
+      LOST: 'bg-red-100 text-red-800',
+      VOID: 'bg-gray-100 text-gray-800',
+      EXPIRED: 'bg-yellow-100 text-yellow-800',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
@@ -64,23 +104,63 @@ export default function PredictionsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-2">
-          {SPORTS_FILTERS.map((sport) => (
-            <button
-              key={sport}
-              onClick={() => {
-                setSelectedSport(sport);
-                setCurrentPage(1);
-              }}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                selectedSport === sport
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {sport}
-            </button>
-          ))}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setCurrentPage(1);
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  selectedCategory === 'all'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                All
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category.slug}
+                  onClick={() => {
+                    setSelectedCategory(category.slug);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    selectedCategory === category.slug
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <div className="flex flex-wrap gap-2">
+              {['UPCOMING', 'WON', 'LOST'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setSelectedStatus(status);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    selectedStatus === status
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Predictions */}
@@ -96,7 +176,10 @@ export default function PredictionsPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
                       <span className="inline-block px-3 py-1 text-sm font-semibold bg-primary-100 text-primary-800 rounded-full">
-                        {prediction.sport}
+                        {prediction.category?.name}
+                      </span>
+                      <span className={`px-2 py-1 rounded text-xs ${getStatusBadge(prediction.status)}`}>
+                        {prediction.status}
                       </span>
                       <span className="text-sm text-gray-500">
                         by {prediction.creator.email}
@@ -107,10 +190,28 @@ export default function PredictionsPage() {
                       {prediction.title}
                     </h3>
                     
-                    <p className="text-gray-600 mb-4">{prediction.description}</p>
+                    {prediction.league && (
+                      <p className="text-sm text-gray-500 mb-1">{prediction.league}</p>
+                    )}
+                    
+                    {(prediction.homeTeam || prediction.awayTeam) && (
+                      <p className="text-sm text-gray-600 mb-2">
+                        {prediction.homeTeam} vs {prediction.awayTeam}
+                      </p>
+                    )}
+                    
+                    <p className="text-gray-700 mb-2">
+                      <span className="font-semibold">Pick:</span> {prediction.pick}
+                    </p>
+                    
+                    {prediction.resultNote && (
+                      <p className="text-sm text-gray-600 mb-2">
+                        <span className="font-semibold">Result:</span> {prediction.resultNote}
+                      </p>
+                    )}
                     
                     <div className="flex items-center text-sm text-gray-500">
-                      <span>Match Date: {format(new Date(prediction.matchDate), 'MMM dd, yyyy HH:mm')}</span>
+                      <span>Scheduled: {format(new Date(prediction.scheduledAt), 'MMM dd, yyyy HH:mm')}</span>
                     </div>
                   </div>
                   
