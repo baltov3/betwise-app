@@ -211,6 +211,138 @@ const commissionAmount = subscriptionPrice * referralCommissionRate;
 | Support | Email | Priority | 24/7 Phone |
 | Referral Rate | 10% | 15% | 20% |
 
+## 📈 Phase 1: Enhanced Predictions & Commission System
+
+### New Features
+
+**1. Categories System**
+- Organized predictions by category (Football, Basketball, Tennis, etc.)
+- Filter predictions by category slug
+- Each prediction linked to a category
+
+**2. Enhanced Prediction Model**
+- **Fields Added:**
+  - `categoryId`: Link to category
+  - `league`: Tournament/league name
+  - `homeTeam` & `awayTeam`: Match participants
+  - `pick`: The actual prediction (e.g., "Liverpool to win")
+  - `status`: UPCOMING, WON, LOST, VOID, EXPIRED
+  - `resultNote`: Optional outcome description
+  - `scheduledAt`: Match scheduled datetime
+- **Removed:** Basic `sport`, `description`, `matchDate` replaced with more structured data
+
+**3. Commission Tracking System**
+- **CommissionLog Model:** Detailed logging of all commission payments
+- **Tiered Commission Rates:**
+  - First month payment: **50% commission** to referrer
+  - Renewal payments: **20% commission** to referrer
+- Automatic commission calculation on successful payments
+- Monthly tracking with `YYYY-MM` format
+- Links commissions to specific payments
+
+**4. Enhanced Payment Model**
+- Added `periodStart` and `periodEnd` for subscription periods
+- Changed `method` to enum (stripe)
+- Changed `amount` from Float to Decimal for precision
+- Removed standalone `date` field (using `createdAt` instead)
+
+**5. Statistics API**
+- **Endpoint:** `GET /api/stats/predictions?period=2m`
+- **Provides:**
+  - Overall metrics (total picks, hit rate, average odds, ROI)
+  - Monthly breakdown of predictions
+  - Category-wise performance
+  - Status distribution (won/lost/void/upcoming/expired)
+
+**6. New API Endpoints**
+
+```
+# Predictions
+GET    /api/predictions?category=slug&status=UPCOMING&from=&to=&page=&pageSize=
+GET    /api/predictions/:id
+POST   /api/predictions (admin)
+PUT    /api/predictions/:id (admin)
+DELETE /api/predictions/:id (admin)
+POST   /api/predictions/maintenance/run (admin) - Auto-expire old predictions
+GET    /api/predictions/categories/list
+
+# Statistics
+GET    /api/stats/predictions?period=2m
+
+# Referrals
+GET    /api/referrals/summary (authenticated)
+GET    /api/referrals/logs (authenticated/admin)
+```
+
+### Database Schema Changes
+
+**New Models:**
+```prisma
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  predictions Prediction[]
+}
+
+model CommissionLog {
+  id             String   @id @default(uuid())
+  referrerId     String
+  referredUserId String
+  fromPaymentId  String
+  amount         Decimal
+  rateApplied    Decimal  // 0.5 for first month, 0.2 for renewals
+  month          String   // YYYY-MM format
+  createdAt      DateTime @default(now())
+}
+```
+
+**Modified Models:**
+- `Prediction`: Enhanced with category, league, teams, pick, status
+- `Payment`: Added period tracking, enum for method
+- `User`: Added commission log relations
+
+### Migration
+
+```bash
+# Run the Phase 1 migration
+cd packages/backend
+DATABASE_URL="your-db-url" npx prisma migrate deploy
+
+# Or in development
+npm run db:migrate
+
+# Seed sample data
+npm run db:seed
+```
+
+### Webhook Integration
+
+The Stripe webhook (`POST /api/stripe/webhook`) now:
+1. Creates payment records with period information
+2. Calculates commission based on payment history:
+   - First payment from a referred user: 50% commission
+   - Subsequent renewals: 20% commission
+3. Creates CommissionLog entries for each commission
+4. Updates Referral `earnedAmount` totals
+
+### Testing Webhooks Locally
+
+```bash
+# Install Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# Login to Stripe
+stripe login
+
+# Forward webhooks to local server
+stripe listen --forward-to localhost:3001/api/stripe/webhook
+
+# Trigger test events
+stripe trigger payment_intent.succeeded
+stripe trigger invoice.payment_succeeded
+```
+
 ## 🚀 Deployment
 
 ### Backend Deployment
