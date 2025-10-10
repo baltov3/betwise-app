@@ -56,31 +56,102 @@ async function main() {
     },
   });
 
-  // Create sample predictions
+  // Create categories
+  const football = await prisma.category.upsert({
+    where: { slug: 'football' },
+    update: {},
+    create: {
+      name: 'Football',
+      slug: 'football',
+    },
+  });
+
+  const basketball = await prisma.category.upsert({
+    where: { slug: 'basketball' },
+    update: {},
+    create: {
+      name: 'Basketball',
+      slug: 'basketball',
+    },
+  });
+
+  const tennis = await prisma.category.upsert({
+    where: { slug: 'tennis' },
+    update: {},
+    create: {
+      name: 'Tennis',
+      slug: 'tennis',
+    },
+  });
+
+  // Create sample predictions with new schema
+  const now = new Date();
+  const futureDate1 = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000); // 2 days from now
+  const futureDate2 = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+  const pastDate1 = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000); // 5 days ago
+  const pastDate2 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+
   await prisma.prediction.createMany({
     data: [
       {
-        sport: 'Football',
+        categoryId: football.id,
         title: 'Liverpool vs Manchester City',
-        description: 'Premier League match - Liverpool to win',
+        league: 'Premier League',
+        homeTeam: 'Liverpool',
+        awayTeam: 'Manchester City',
+        pick: 'Liverpool to win',
         odds: 2.5,
-        matchDate: new Date('2024-01-15T15:00:00Z'),
+        scheduledAt: futureDate1,
+        status: 'UPCOMING',
         createdBy: admin.id,
       },
       {
-        sport: 'Basketball',
+        categoryId: football.id,
+        title: 'Arsenal vs Chelsea',
+        league: 'Premier League',
+        homeTeam: 'Arsenal',
+        awayTeam: 'Chelsea',
+        pick: 'Over 2.5 goals',
+        odds: 1.85,
+        scheduledAt: futureDate2,
+        status: 'UPCOMING',
+        createdBy: admin.id,
+      },
+      {
+        categoryId: basketball.id,
         title: 'Lakers vs Warriors',
-        description: 'NBA regular season - Over 220.5 total points',
+        league: 'NBA',
+        homeTeam: 'Los Angeles Lakers',
+        awayTeam: 'Golden State Warriors',
+        pick: 'Over 220.5 total points',
         odds: 1.9,
-        matchDate: new Date('2024-01-16T20:00:00Z'),
+        scheduledAt: pastDate1,
+        status: 'WON',
+        resultNote: 'Final score: 115-112. Total 227 points.',
         createdBy: admin.id,
       },
       {
-        sport: 'Tennis',
+        categoryId: tennis.id,
         title: 'Djokovic vs Nadal',
-        description: 'ATP Masters - Djokovic to win in straight sets',
+        league: 'ATP Masters',
+        pick: 'Djokovic to win in straight sets',
         odds: 3.2,
-        matchDate: new Date('2024-01-17T14:00:00Z'),
+        scheduledAt: pastDate2,
+        status: 'LOST',
+        resultNote: 'Nadal won 2-1',
+        createdBy: admin.id,
+      },
+      {
+        categoryId: basketball.id,
+        title: 'Celtics vs Heat',
+        league: 'NBA',
+        homeTeam: 'Boston Celtics',
+        awayTeam: 'Miami Heat',
+        pick: 'Celtics -5.5',
+        odds: 1.95,
+        scheduledAt: pastDate1,
+        status: 'WON',
+        resultNote: 'Celtics won 110-98',
         createdBy: admin.id,
       },
     ],
@@ -89,6 +160,8 @@ async function main() {
   console.log('Seed data created successfully!');
   console.log('Admin credentials: admin@betwise.com / admin123');
   console.log('User credentials: user1@example.com / user123');
+  console.log('Categories created: Football, Basketball, Tennis');
+  console.log('Sample predictions created (upcoming and historical)');
 }
 
 main()
