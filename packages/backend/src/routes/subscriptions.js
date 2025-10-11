@@ -1,7 +1,8 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js'; // <-- ТУК!
+
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -12,6 +13,22 @@ const SUBSCRIPTION_PLANS = {
   PREMIUM: { price: 19.99, priceId: 'price_premium' },
   VIP: { price: 39.99, priceId: 'price_vip' },
 };
+
+// Get all subscriptions (admin only)
+router. get('/all', authenticate, async (req, res) => {
+  try {
+    const subs = await prisma.subscription.findMany({
+      orderBy: { startDate: 'desc' },
+      include: {
+        user: { select: { email: true } }
+      }
+    });
+    res.json({ success: true, data: { subscriptions: subs } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 
 // Create subscription
 router.post('/create', authenticate, async (req, res) => {

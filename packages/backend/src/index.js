@@ -11,6 +11,7 @@ import referralRoutes from './routes/referrals.js';
 import predictionRoutes from './routes/predictions.js';
 import paymentRoutes from './routes/payments.js';
 import adminRoutes from './routes/admin.js';
+import payoutsRoutes from './routes/payouts.js';
 import stripeWebhookRoutes from './routes/stripe-webhook.js';
 
 dotenv.config();
@@ -54,6 +55,8 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+
+app.use('/api/payouts', payoutsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
