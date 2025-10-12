@@ -29,6 +29,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
 
+  const isAdminRoot = pathname === '/admin';
+
   const handleLogout = () => {
     logout();
     router.push('/');
@@ -124,9 +126,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           <div className="flex-1 px-4 flex justify-between">
             <div className="flex-1 flex items-center">
-              <Link href="/dashboard" className="flex items-center text-sm text-gray-500 hover:text-gray-700">
+              <Link
+                href={isAdminRoot ? '/dashboard' : '/admin'}
+                className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+              >
                 <ArrowLeftIcon className="h-4 w-4 mr-1" />
-                Back to User Dashboard
+                {isAdminRoot ? 'Back to User Dashboard' : 'Back to Admin Panel'}
               </Link>
             </div>
             <div className="ml-4 flex items-center md:ml-6">
