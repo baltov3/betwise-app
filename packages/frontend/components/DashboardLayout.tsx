@@ -18,6 +18,7 @@ const navigation = [
   { name: 'Predictions', href: '/dashboard/predictions', icon: ChartBarIcon },
   { name: 'Subscription', href: '/dashboard/subscription', icon: CreditCardIcon },
   { name: 'Referrals', href: '/dashboard/referrals', icon: UsersIcon },
+  { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCardIcon },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

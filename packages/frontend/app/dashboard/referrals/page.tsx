@@ -61,7 +61,7 @@ export default function ReferralsPage() {
     }
   };
 
-  const requestPayout = async () => {
+    const requestPayout = async () => {
     if (!stats || parseFloat(stats.totalEarnings) < 10) {
       toast.error('Minimum payout amount is $10');
       return;

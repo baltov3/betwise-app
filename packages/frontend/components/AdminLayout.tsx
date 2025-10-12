@@ -152,7 +152,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
           <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+            {/* Премахнато max-w-7xl mx-auto -> пълна ширина */}
+            <div className="w-full px-4 sm:px-6 md:px-8">
               {children}
             </div>
           </div>

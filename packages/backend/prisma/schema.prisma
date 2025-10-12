@@ -32,6 +32,15 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PROCESSING
+  PAID
+  FAILED
+}
+
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
@@ -61,12 +70,13 @@ model User {
   stripeChargesEnabled     Boolean  @default(false)
   stripeRequirementsDue    Json?
 
-  // Relations (IMPORTANT: keep these to satisfy opposite sides)
-  subscription Subscription?
-  referrals    Referral[]    @relation("Referrer")
-  referred     Referral[]    @relation("Referred")
-  predictions  Prediction[]
-  payments     Payment[]
+  // Relations
+  subscription  Subscription?
+  referrals     Referral[]    @relation("Referrer")
+  referred      Referral[]    @relation("Referred")
+  predictions   Prediction[]
+  payments      Payment[]
+  payoutRequests PayoutRequest[]
 
   @@map("users")
 }
@@ -138,4 +148,23 @@ model Payment {
   user User @relation(fields: [userId], references: [id])
 
   @@map("payments")
+}
+
+model PayoutRequest {
+  id               String       @id @default(uuid())
+  userId           String
+  amount           Float
+  currency         String       @default("usd")
+  status           PayoutStatus @default(REQUESTED)
+  reason           String?
+  adminNote        String?
+  stripeTransferId String?      @unique
+  stripePayoutId   String?      @unique
+  processedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("payout_requests")
 }

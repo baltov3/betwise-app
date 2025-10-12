@@ -7,41 +7,60 @@ const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Stripe webhook (raw body needed)
+// ... горната част и съществуващите handlers остават
+
 router.post('/webhook', express.raw({type: 'application/json'}), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
+  // ... constructEvent и switch
   try {
     switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object);
+      // ... вашите съществуващи cases
+      case 'payout.paid':
+        await handlePayoutPaid(event.data.object, event.account);
         break;
-      case 'invoice.payment_succeeded':
-        await handlePaymentSucceeded(event.data.object);
-        break;
-      case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object);
-        break;
-      case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object);
+      case 'payout.failed':
+        await handlePayoutFailed(event.data.object, event.account);
         break;
       default:
         console.log(`Unhandled event type ${event.type}`);
     }
-
-    res.json({received: true});
+    res.json({ received: true });
   } catch (error) {
     console.error('Webhook handler error:', error);
-    res.status(500).json({error: 'Webhook handler failed'});
+    res.status(500).json({ error: 'Webhook handler failed' });
   }
 });
+
+async function handlePayoutPaid(payout, accountId) {
+  try {
+    const req = await prisma.payoutRequest.findFirst({
+      where: { stripePayoutId: payout.id }
+    });
+    if (!req) return;
+
+    await prisma.payoutRequest.update({
+      where: { id: req.id },
+      data: { status: 'PAID', processedAt: new Date() }
+    });
+  } catch (e) {
+    console.error('handlePayoutPaid error:', e);
+  }
+}
+
+async function handlePayoutFailed(payout, accountId) {
+  try {
+    const req = await prisma.payoutRequest.findFirst({
+      where: { stripePayoutId: payout.id }
+    });
+    if (!req) return;
+
+    await prisma.payoutRequest.update({
+      where: { id: req.id },
+      data: { status: 'FAILED', adminNote: payout.failure_message || 'Payout failed' }
+    });
+  } catch (e) {
+    console.error('handlePayoutFailed error:', e);
+  }
+}
 
 async function handleCheckoutCompleted(session) {
   const { userId, plan } = session.metadata;
