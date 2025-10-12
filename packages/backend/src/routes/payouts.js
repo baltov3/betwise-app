@@ -1,40 +1,318 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
+import jwt from 'jsonwebtoken';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 
-// Генерира Stripe onboarding/update линк
+// Helper for country code
+function getCountryCode(userCountry) {
+  if (typeof userCountry === 'string' && userCountry.trim().length === 2) {
+    return userCountry.trim().toUpperCase();
+  }
+  return 'BG';
+}
+
+/**
+ * Create Stripe Express account for current user (if missing)
+ */
+// Create Stripe Express account
+router.post('/create-account', authenticate, async (req, res) => {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ success: false, message: 'Server misconfigured: STRIPE_SECRET_KEY missing' });
+    }
+
+    let user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.stripeAccountId) {
+      return res.json({ success: true, data: { stripeAccountId: user.stripeAccountId } });
+    }
+
+    const countryCode = getCountryCode(user.country);
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email: user.email,
+      country: countryCode,
+      capabilities: { transfers: { requested: true } },
+      business_type: 'individual',
+      individual: {
+        first_name: user.firstName || undefined,
+        last_name: user.lastName || undefined,
+        email: user.email,
+        address: {
+          line1: user.addressLine1 || undefined,
+          line2: user.addressLine2 || undefined,
+          city: user.city || undefined,
+          state: user.state || undefined,
+          postal_code: user.postalCode || undefined,
+          country: countryCode,
+        },
+      },
+      settings: { payouts: { schedule: { interval: 'manual' } } },
+    });
+
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        stripeAccountId: account.id,
+        stripeOnboardingComplete: Boolean(account.details_submitted),
+        stripePayoutsEnabled: Boolean(account.payouts_enabled),
+        stripeChargesEnabled: Boolean(account.charges_enabled),
+        stripeRequirementsDue: account.requirements?.currently_due || null,
+      },
+      select: {
+        id: true, email: true, stripeAccountId: true,
+        stripeOnboardingComplete: true, stripePayoutsEnabled: true, stripeChargesEnabled: true,
+        stripeRequirementsDue: true,
+      }
+    });
+
+    return res.json({ success: true, data: user });
+  } catch (e) {
+    console.error('Create Stripe account error:', e?.type || e?.name, e?.code, e?.message);
+    return res.status(500).json({
+      success: false,
+      message: e?.message || 'Failed to create Stripe account',
+      code: e?.code || e?.type || 'stripe_error'
+    });
+  }
+});
+
+// OAuth authorize URL
+router.get('/connect/authorize', authenticate, async (req, res) => {
+  try {
+    if (!process.env.STRIPE_CONNECT_CLIENT_ID || !process.env.BACKEND_URL) {
+      return res.status(500).json({ success: false, message: 'Missing STRIPE_CONNECT_CLIENT_ID or BACKEND_URL in env' });
+    }
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ success: false, message: 'Missing JWT_SECRET in env' });
+    }
+
+    const state = jwt.sign(
+      { userId: req.user.id, ts: Date.now() },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: process.env.STRIPE_CONNECT_CLIENT_ID,
+      scope: 'read_write',
+      redirect_uri: `${process.env.BACKEND_URL}/api/payouts/connect/callback`,
+      state,
+    });
+
+    const url = `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
+    return res.json({ success: true, data: { url } });
+  } catch (e) {
+    console.error('Connect authorize error:', e?.message || e);
+    return res.status(500).json({ success: false, message: e?.message || 'Failed to build authorize URL' });
+  }
+});
+
+/**
+ * Generate Stripe onboarding/update link
+ */
 router.get('/account-link', authenticate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (!user.stripeAccountId) {
+      return res.status(400).json({ success: false, message: 'Stripe account not found. Create it first.' });
+    }
+
+    const account = await stripe.accounts.retrieve(user.stripeAccountId);
+    const link = await stripe.accountLinks.create({
+      account: user.stripeAccountId,
+      refresh_url: `${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?refresh=1`,
+      return_url: `${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?done=1`,
+      type: account.details_submitted ? 'account_update' : 'account_onboarding',
+    });
+
+    return res.json({ success: true, data: { url: link.url, type: account.details_submitted ? 'update' : 'onboarding' } });
+  } catch (e) {
+    console.error('Create account link error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to create account link' });
+  }
+});
+
+/**
+ * Create login link to Stripe Express Dashboard (to manage bank account, payouts, etc.)
+ */
+router.get('/login-link', authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user?.stripeAccountId) {
       return res.status(400).json({ success: false, message: 'Stripe account not found' });
     }
 
-    const link = await stripe.accountLinks.create({
-      account: user.stripeAccountId,
-      refresh_url: `${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?refresh=1`,
-      return_url: `${process.env.FRONTEND_URL}/dashboard?onboarding=done`,
-      type: 'account_onboarding',
+    const loginLink = await stripe.accounts.createLoginLink(user.stripeAccountId, {
+      redirect_url: `${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?dashboard=1`
     });
 
-    return res.json({ success: true, data: { url: link.url } });
+    return res.json({ success: true, data: { url: loginLink.url } });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ success: false, message: 'Failed to create account link' });
+    console.error('Create login link error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to create login link' });
   }
 });
 
-// Синк на статуса от Stripe (charges/payouts capability)
+/**
+ * Connect existing Stripe Standard account via OAuth (authorize URL)
+ */
+router.get('/connect/authorize', authenticate, async (req, res) => {
+  try {
+    if (!process.env.STRIPE_CONNECT_CLIENT_ID || !process.env.BACKEND_URL) {
+      return res.status(500).json({ success: false, message: 'Missing STRIPE_CONNECT_CLIENT_ID or BACKEND_URL in env' });
+    }
+    const state = jwt.sign(
+      { userId: req.user.id, ts: Date.now() },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: process.env.STRIPE_CONNECT_CLIENT_ID,
+      scope: 'read_write',
+      redirect_uri: `${process.env.BACKEND_URL}/api/payouts/connect/callback`,
+      state,
+    });
+
+    const url = `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
+    return res.json({ success: true, data: { url } });
+  } catch (e) {
+    console.error('Connect authorize error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to build authorize URL' });
+  }
+});
+
+/**
+ * OAuth callback: exchange code for stripe_user_id and link to user
+ */
+router.get('/connect/callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+
+    if (error) {
+      console.error('Stripe OAuth error:', error, error_description);
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?oauth=error`);
+    }
+    if (!code || !state) {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?oauth=missing`);
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(String(state), process.env.JWT_SECRET);
+    } catch (e) {
+      console.error('Invalid OAuth state:', e);
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?oauth=state_invalid`);
+    }
+
+    const tokenResp = await stripe.oauth.token({
+      grant_type: 'authorization_code',
+      code: String(code),
+    });
+
+    const connectedAccountId = tokenResp.stripe_user_id;
+    if (!connectedAccountId) {
+      return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?oauth=no_account`);
+    }
+
+    // Retrieve account to sync flags
+    const account = await stripe.accounts.retrieve(connectedAccountId);
+
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: {
+        stripeAccountId: connectedAccountId,
+        stripeOnboardingComplete: Boolean(account.details_submitted),
+        stripePayoutsEnabled: Boolean(account.payouts_enabled),
+        stripeChargesEnabled: Boolean(account.charges_enabled),
+        stripeRequirementsDue: account.requirements?.currently_due || null,
+      }
+    });
+
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?connected=1`);
+  } catch (e) {
+    console.error('Connect callback error:', e);
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard/payouts/onboarding?oauth=failed`);
+  }
+});
+
+/**
+ * Update local profile info used for Stripe onboarding
+ */
+router.put('/profile', authenticate, async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      postalCode,
+      country,
+      birthDate, // 'YYYY-MM-DD'
+    } = req.body || {};
+
+    const data = {
+      firstName: firstName ?? undefined,
+      lastName: lastName ?? undefined,
+      addressLine1: addressLine1 ?? undefined,
+      addressLine2: addressLine2 ?? undefined,
+      city: city ?? undefined,
+      state: state ?? undefined,
+      postalCode: postalCode ?? undefined,
+      country: country ?? undefined,
+      birthDate: birthDate ? new Date(birthDate) : undefined,
+    };
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data,
+      select: {
+        id: true, email: true, firstName: true, lastName: true,
+        addressLine1: true, addressLine2: true, city: true, state: true,
+        postalCode: true, country: true, birthDate: true,
+        stripeAccountId: true, stripePayoutsEnabled: true, stripeOnboardingComplete: true,
+      }
+    });
+
+    return res.json({ success: true, data: updated });
+  } catch (e) {
+    console.error('Update payout profile error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to update profile' });
+  }
+});
+
+/**
+ * Sync payouts/charges status from Stripe
+ */
 router.get('/status', authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user?.stripeAccountId) {
-      return res.status(400).json({ success: false, message: 'Stripe account not found' });
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: user?.id,
+          email: user?.email,
+          stripeAccountId: null,
+          stripeOnboardingComplete: false,
+          stripePayoutsEnabled: false,
+          stripeChargesEnabled: false,
+          stripeRequirementsDue: [],
+        },
+      });
     }
 
     const account = await stripe.accounts.retrieve(user.stripeAccountId);
@@ -61,7 +339,9 @@ router.get('/status', authenticate, async (req, res) => {
   }
 });
 
-// Създаване на заявка за изплащане (потребител)
+/**
+ * Create payout request (user)
+ */
 router.post('/request', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -99,7 +379,9 @@ router.post('/request', authenticate, async (req, res) => {
   }
 });
 
-// Моите заявки (потребител)
+/**
+ * Get my payout requests (user)
+ */
 router.get('/my-requests', authenticate, async (req, res) => {
   try {
     const list = await prisma.payoutRequest.findMany({
@@ -113,7 +395,9 @@ router.get('/my-requests', authenticate, async (req, res) => {
   }
 });
 
-// Списък заявки (админ)
+/**
+ * List payout requests (admin)
+ */
 router.get('/requests', authenticate, requireAdmin, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
@@ -149,7 +433,9 @@ router.get('/requests', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Отказ на заявка (админ)
+/**
+ * Reject payout request (admin)
+ */
 router.post('/requests/:id/reject', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -167,7 +453,9 @@ router.post('/requests/:id/reject', authenticate, requireAdmin, async (req, res)
   }
 });
 
-// Одобрение и изплащане (админ)
+/**
+ * Approve and process payout (admin)
+ */
 router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -189,7 +477,7 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
       return res.status(400).json({ success: false, message: 'User does not have a Stripe account' });
     }
 
-    // Маркираме като PROCESSING
+    // Mark as PROCESSING
     await prisma.payoutRequest.update({
       where: { id: request.id },
       data: { status: 'PROCESSING' }
@@ -197,7 +485,7 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
 
     const amountInCents = Math.round(request.amount * 100);
 
-    // 1) Transfer: платформа -> connected account
+    // 1) Transfer: platform -> connected account
     const transfer = await stripe.transfers.create({
       amount: amountInCents,
       currency: request.currency || 'usd',
@@ -205,7 +493,7 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
       metadata: { payoutRequestId: request.id, userId: user.id }
     });
 
-    // 2) Payout: connected account -> банкова сметка/карта
+    // 2) Payout: connected account -> external bank/card
     const payout = await stripe.payouts.create(
       {
         amount: amountInCents,
@@ -226,7 +514,6 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
       }
     });
 
-    // Леджър запис
     await prisma.payment.create({
       data: {
         userId: user.id,
@@ -238,7 +525,6 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
       }
     });
 
-    // Зануляваме referral earnedAmount след успешно изплащане
     await prisma.referral.updateMany({
       where: { referrerId: user.id },
       data: { earnedAmount: 0 }
@@ -247,7 +533,6 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
     return res.json({ success: true, data: { request: updated } });
   } catch (e) {
     console.error('Approve/process payout error:', e);
-
     const id = req.params?.id;
     if (id) {
       try {
@@ -260,7 +545,6 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
         });
       } catch { /* noop */ }
     }
-
     return res.status(500).json({ success: false, message: 'Failed to process payout' });
   }
 });
