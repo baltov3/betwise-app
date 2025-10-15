@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { useAuth } from '../../../contexts/AuthContext';
 
-
 interface RequestItem {
   id: string;
   amount: number;
@@ -65,6 +64,8 @@ export default function UserPayoutsPage() {
     );
   }
 
+  const balance = status?.balance || { earned: 0, locked: 0, pending: 0, available: 0 };
+
   return (
     <DashboardLayout>
       <div className="p-4 space-y-6">
@@ -73,22 +74,47 @@ export default function UserPayoutsPage() {
           <p className="text-gray-600">Request payouts for your referral earnings.</p>
         </div>
 
-     <div className="p-4 border rounded">
-  <div className="mb-2">
-    <strong>Stripe status:</strong>{' '}
-    {status?.stripePayoutsEnabled ? 'Payouts enabled' : 'Payouts not enabled'}
-  </div>
-  {!status?.stripePayoutsEnabled && (
-    <Link href="/dashboard/payouts/onboarding" className="inline-block px-3 py-2 bg-indigo-600 text-white rounded">
-      Complete Stripe onboarding
-    </Link>
-  )}
-</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 border rounded">
+            <div className="mb-2">
+              <strong>Stripe status:</strong>{' '}
+              {status?.stripePayoutsEnabled ? 'Payouts enabled' : 'Payouts not enabled'}
+            </div>
+            {!status?.stripePayoutsEnabled && (
+              <Link href="/dashboard/payouts/onboarding" className="inline-block px-3 py-2 bg-indigo-600 text-white rounded">
+                Complete Stripe onboarding
+              </Link>
+            )}
+          </div>
+
+          <div className="p-4 border rounded">
+            <h2 className="text-lg font-semibold mb-2">Balance</h2>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 bg-gray-50 rounded">
+                <div className="text-xs text-gray-500">Earned</div>
+                <div className="text-lg font-semibold text-gray-800">${Number(balance.earned).toFixed(2)}</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded">
+                <div className="text-xs text-gray-500">Locked (processing/paid)</div>
+                <div className="text-lg font-semibold text-gray-800">${Number(balance.locked).toFixed(2)}</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded">
+                <div className="text-xs text-gray-500">Pending (requested)</div>
+                <div className="text-lg font-semibold text-gray-800">${Number(balance.pending).toFixed(2)}</div>
+              </div>
+              <div className="p-2 bg-gray-50 rounded">
+                <div className="text-xs text-gray-500">Available</div>
+                <div className="text-lg font-semibold text-green-600">${Number(balance.available).toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <button
           className="px-4 py-2 bg-green-600 text-white rounded"
           onClick={requestPayout}
-          disabled={!status?.stripePayoutsEnabled}
+          disabled={!status?.stripePayoutsEnabled || Number(balance.available) <= 0}
+          title={!status?.stripePayoutsEnabled ? 'Enable payouts in Stripe first' : Number(balance.available) <= 0 ? 'No available balance' : ''}
         >
           Request payout
         </button>

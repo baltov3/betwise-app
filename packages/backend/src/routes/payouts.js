@@ -307,6 +307,47 @@ router.post('/admin/approve/:id', authenticate, requireAdmin, async (req, res) =
   }
 });
 
+router.get('/requests', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const requests = await prisma.payoutRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true } } },
+    });
+    return res.json({ success: true, data: { requests } });
+  } catch (e) {
+    console.error('Admin list payout requests error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to load payout requests' });
+  }
+});
+
+/**
+ * Admin: reject payout request
+ * Matches frontend: POST /api/payouts/requests/:id/reject
+ */
+router.post('/requests/:id/reject', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const note = req.body?.note || null;
+
+    const request = await prisma.payoutRequest.findUnique({ where: { id } });
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Payout request not found' });
+    }
+    if (request.status !== 'REQUESTED') {
+      return res.status(400).json({ success: false, message: `Cannot reject request in status ${request.status}` });
+    }
+
+    const updated = await prisma.payoutRequest.update({
+      where: { id },
+      data: { status: 'REJECTED', adminNote: note, processedAt: new Date() },
+    });
+
+    return res.json({ success: true, data: { request: updated } });
+  } catch (e) {
+    console.error('Admin reject payout request error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to reject payout request' });
+  }
+});
 /**
  * Admin: reject payout request
  */
