@@ -1,9 +1,9 @@
 {
   "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/stats/page": "app/dashboard/stats/page.js",
-  "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
   "/dashboard/predictions/page": "app/dashboard/predictions/page.js",
-  "/admin/predictions/page": "app/admin/predictions/page.js",
-  "/admin/predictions/new/page": "app/admin/predictions/new/page.js",
-  "/admin/page": "app/admin/page.js"
+  "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
+  "/dashboard/referrals/page": "app/dashboard/referrals/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/predictions/page": "app/admin/predictions/page.js"
 }
