@@ -357,14 +357,13 @@ router.get('/requests', authenticate, requireAdmin, async (req, res) => {
 });
 
 
-
-// ... горния код е непроменен
+// ... останалите маршрути и помощни функции надолу
 
 /**
  * Create payout request for current user
- * - приема custom amount от тялото
- * - минимална сума: $20
- * - amount <= available
+ * Приема custom amount в тялото
+ * Минимална сума: $20
+ * Сума <= available
  */
 router.post('/request', authenticate, async (req, res) => {
   try {
@@ -381,7 +380,7 @@ router.post('/request', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'No available balance for payout' });
     }
 
-    const requestedAmount = Number(req.body?.amount ?? available);
+    const requestedAmount = Number(req.body?.amount ?? NaN);
 
     if (!Number.isFinite(requestedAmount)) {
       return res.status(400).json({ success: false, message: 'Invalid amount requested' });
@@ -407,12 +406,92 @@ router.post('/request', authenticate, async (req, res) => {
 
     return res.json({ success: true, data: { request } });
   } catch (e) {
-    console.error(e);
+    console.error('Request payout error:', e);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
-// ... останалият код по-долу
+// ... останалият код по-долу, export default router и т.н.
+
+// ALIAS към съществуващия админски approve, за да съвпада с фронтенда:
+// POST /api/payouts/requests/:id/approve
+router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const payoutReq = await prisma.payoutRequest.findUnique({ where: { id: req.params.id } });
+    if (!payoutReq) return res.status(404).json({ success: false, message: 'Payout request not found' });
+    if (!['REQUESTED', 'FAILED'].includes(payoutReq.status)) {
+      return res.status(400).json({ success: false, message: 'Request not in REQUESTED/FAILED state' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payoutReq.userId } });
+    if (!user?.stripeAccountId) return res.status(400).json({ success: false, message: 'User has no connected Stripe account' });
+
+    // Проверка: payouts enabled
+    const account = await stripe.accounts.retrieve(user.stripeAccountId);
+    if (!account.payouts_enabled) {
+      return res.status(400).json({ success: false, message: 'User payouts not enabled in Stripe' });
+    }
+
+    const amountCents = Math.round(payoutReq.amount * 100);
+    const currency = payoutReq.currency || 'usd';
+
+    // Маркираме като PROCESSING
+    await prisma.payoutRequest.update({ where: { id: payoutReq.id }, data: { status: 'PROCESSING' } });
+
+    // 1) Transfer: платформа -> свързан акаунт
+    const transfer = await stripe.transfers.create({
+      amount: amountCents,
+      currency,
+      destination: user.stripeAccountId,
+      metadata: { payoutRequestId: payoutReq.id, userId: user.id }
+    });
+
+    // 2) Payout: свързан акаунт -> банка/карта
+    const payout = await stripe.payouts.create(
+      { amount: amountCents, currency, metadata: { payoutRequestId: payoutReq.id, userId: user.id } },
+      { stripeAccount: user.stripeAccountId }
+    );
+
+    const updated = await prisma.payoutRequest.update({
+      where: { id: payoutReq.id },
+      data: {
+        status: 'PAID',
+        stripeTransferId: transfer.id,
+        stripePayoutId: payout.id,
+        processedAt: new Date()
+      }
+    });
+
+    // Запис в Payments (отрицателна сума – извеждане)
+    await prisma.payment.create({
+      data: {
+        userId: user.id,
+        amount: -payoutReq.amount,
+        currency,
+        method: 'stripe_payout',
+        status: 'COMPLETED',
+        stripeId: payout.id
+      }
+    });
+
+    // Нулиране на рефъръл печалбите след изплащане
+    await prisma.referral.updateMany({
+      where: { referrerId: user.id },
+      data: { earnedAmount: 0 }
+    });
+
+    return res.json({ success: true, data: { request: updated } });
+  } catch (e) {
+    console.error('Approve/process payout error:', e);
+    try {
+      await prisma.payoutRequest.update({
+        where: { id: req.params.id },
+        data: { status: 'FAILED', adminNote: e?.message?.slice(0, 500) || 'Stripe payout failed' }
+      });
+    } catch {}
+    return res.status(500).json({ success: false, message: 'Failed to process payout' });
+  }
+});
 /**
  * Admin: reject payout request
  * Matches frontend: POST /api/payouts/requests/:id/reject

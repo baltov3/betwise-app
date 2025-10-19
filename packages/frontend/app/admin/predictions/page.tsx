@@ -13,6 +13,9 @@ interface Prediction {
   description: string;
   odds: number;
   matchDate: string;
+  status?: 'SCHEDULED' | 'LIVE' | 'FINISHED' | 'POSTPONED' | 'CANCELED';
+  result?: 'PENDING' | 'WIN' | 'LOSS' | 'VOID' | 'PUSH';
+  settledAt?: string | null;
   creator?: {
     email: string;
   };
@@ -49,6 +52,23 @@ export default function AdminPredictionsPage() {
     }
   };
 
+  const settlePrediction = async (id: string) => {
+    const res = prompt('Enter result (WIN/LOSS/VOID/PUSH):', 'WIN');
+    if (!res) return;
+    const value = res.trim().toUpperCase();
+    if (!['WIN', 'LOSS', 'VOID', 'PUSH'].includes(value)) {
+      toast.error('Invalid result');
+      return;
+    }
+    try {
+      await api.post(`/predictions/${id}/settle`, { result: value });
+      toast.success('Prediction settled');
+      fetchPredictions();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to settle');
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
@@ -70,6 +90,8 @@ export default function AdminPredictionsPage() {
                 <th className="p-2 border">Title</th>
                 <th className="p-2 border">Match Date</th>
                 <th className="p-2 border">Odds</th>
+                <th className="p-2 border">Status</th>
+                <th className="p-2 border">Result</th>
                 <th className="p-2 border">Actions</th>
               </tr>
             </thead>
@@ -80,10 +102,18 @@ export default function AdminPredictionsPage() {
                   <td className="p-2 border">{p.title}</td>
                   <td className="p-2 border">{new Date(p.matchDate).toLocaleString()}</td>
                   <td className="p-2 border">{p.odds}</td>
+                  <td className="p-2 border">{p.status ?? 'SCHEDULED'}</td>
+                  <td className="p-2 border">
+                    {p.result ?? 'PENDING'}
+                    {p.settledAt ? ` (at ${new Date(p.settledAt).toLocaleString()})` : ''}
+                  </td>
                   <td className="p-2 border">
                     <Link href={`/admin/predictions/edit/${p.id}`} className="btn-secondary mr-2">
                       Edit
                     </Link>
+                    <button onClick={() => settlePrediction(p.id)} className="btn-primary mr-2">
+                      Set Result
+                    </button>
                     <button onClick={() => deletePrediction(p.id)} className="btn-danger">
                       Delete
                     </button>

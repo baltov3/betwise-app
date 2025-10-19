@@ -52,6 +52,56 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * NEW: Active predictions
+ * GET /api/predictions/active?page=1&limit=10&sport=Football
+ * Показва прогнози с бъдеща дата (matchDate >= now).
+ * Този маршрут работи без нови полета (result/status).
+ */
+router.get('/active', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, sport } = req.query;
+    const pageN = parseInt(String(page), 10);
+    const limitN = parseInt(String(limit), 10);
+    const skip = (pageN - 1) * limitN;
+    const now = new Date();
+
+    const where = {
+      matchDate: { gte: now },
+      ...(sport ? { sport } : {}),
+    };
+
+    const [predictions, total] = await Promise.all([
+      prisma.prediction.findMany({
+        where,
+        skip,
+        take: limitN,
+        orderBy: { matchDate: 'asc' },
+        include: {
+          creator: { select: { email: true } },
+        },
+      }),
+      prisma.prediction.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        predictions,
+        pagination: {
+          page: pageN,
+          limit: limitN,
+          total,
+          pages: Math.ceil(total / limitN) || 1,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Active predictions error:', err);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // Get single prediction
 router.get('/:id', async (req, res) => {
   try {

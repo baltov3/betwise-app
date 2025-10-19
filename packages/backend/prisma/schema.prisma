@@ -115,6 +115,23 @@ model Referral {
   @@map("referrals")
 }
 
+enum PredictionStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELED
+}
+
+enum PredictionResult {
+  PENDING
+  WIN
+  LOSS
+  VOID
+  PUSH
+}
+
+
 model Prediction {
   id          String   @id @default(uuid())
   sport       String
@@ -125,6 +142,11 @@ model Prediction {
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // NEW
+  status     PredictionStatus @default(SCHEDULED)
+  result     PredictionResult @default(PENDING)
+  settledAt  DateTime?
 
   // Relations
   creator User @relation(fields: [createdBy], references: [id])

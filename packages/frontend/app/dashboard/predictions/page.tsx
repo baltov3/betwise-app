@@ -43,7 +43,8 @@ export default function PredictionsPage() {
         params.append('sport', selectedSport);
       }
 
-      const response = await api.get(`/predictions?${params.toString()}`);
+      // CHANGED: ползваме /predictions/active
+      const response = await api.get(`/predictions/active?${params.toString()}`);
       setPredictions(response.data.data.predictions);
       setTotalPages(response.data.data.pagination.pages);
     } catch (error) {
