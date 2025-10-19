@@ -307,12 +307,48 @@ router.post('/admin/approve/:id', authenticate, requireAdmin, async (req, res) =
   }
 });
 
+/**
+ * Admin: list payout requests
+ * По подразбиране връща само активни заявки (REQUESTED и FAILED).
+ * За да върне всички записи (вкл. PAID и REJECTED): GET /api/payouts/requests?showAll=true
+ */
 router.get('/requests', authenticate, requireAdmin, async (req, res) => {
   try {
+    const showAll = String(req.query.showAll || '').toLowerCase() === 'true';
+
+    // Активни за обработка: REQUESTED и FAILED
+    const where = showAll ? {} : { status: { in: ['REQUESTED', 'FAILED'] } };
+
     const requests = await prisma.payoutRequest.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { email: true } } },
     });
+
+    return res.json({ success: true, data: { requests } });
+  } catch (e) {
+    console.error('Admin list payout requests error:', e);
+    return res.status(500).json({ success: false, message: 'Failed to load payout requests' });
+  }
+});
+/**
+ * Admin: list payout requests
+ * По подразбиране връща само активни заявки (REQUESTED и FAILED).
+ * За да върне всички записи (вкл. PAID и REJECTED): GET /api/payouts/requests?showAll=true
+ */
+router.get('/requests', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const showAll = String(req.query.showAll || '').toLowerCase() === 'true';
+
+    // Активни за обработка: REQUESTED и FAILED
+    const where = showAll ? {} : { status: { in: ['REQUESTED', 'FAILED'] } };
+
+    const requests = await prisma.payoutRequest.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true } } },
+    });
+
     return res.json({ success: true, data: { requests } });
   } catch (e) {
     console.error('Admin list payout requests error:', e);
@@ -320,6 +356,63 @@ router.get('/requests', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+
+
+// ... горния код е непроменен
+
+/**
+ * Create payout request for current user
+ * - приема custom amount от тялото
+ * - минимална сума: $20
+ * - amount <= available
+ */
+router.post('/request', authenticate, async (req, res) => {
+  try {
+    const MIN_PAYOUT = 20;
+    const userId = req.user.id;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user?.stripeAccountId) {
+      return res.status(400).json({ success: false, message: 'Connect your Stripe account first' });
+    }
+
+    const { available } = await computeAvailableBalance(userId);
+    if (available <= 0) {
+      return res.status(400).json({ success: false, message: 'No available balance for payout' });
+    }
+
+    const requestedAmount = Number(req.body?.amount ?? available);
+
+    if (!Number.isFinite(requestedAmount)) {
+      return res.status(400).json({ success: false, message: 'Invalid amount requested' });
+    }
+
+    if (requestedAmount < MIN_PAYOUT) {
+      return res.status(400).json({ success: false, message: `Minimum payout amount is $${MIN_PAYOUT}` });
+    }
+
+    if (requestedAmount > available) {
+      return res.status(400).json({ success: false, message: 'Invalid amount requested' });
+    }
+
+    const request = await prisma.payoutRequest.create({
+      data: {
+        userId,
+        amount: Number(requestedAmount.toFixed(2)),
+        currency: 'usd',
+        status: 'REQUESTED',
+        reason: req.body?.reason || null,
+      }
+    });
+
+    return res.json({ success: true, data: { request } });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// ... останалият код по-долу
 /**
  * Admin: reject payout request
  * Matches frontend: POST /api/payouts/requests/:id/reject

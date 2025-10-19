@@ -21,20 +21,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/page.js"
     ],
-    "/dashboard/payouts/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/payouts/page.js"
-    ],
-    "/dashboard/referrals/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/referrals/page.js"
-    ],
-    "/dashboard/payouts/onboarding/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/payouts/onboarding/page.js"
     ],
     "/admin/page": [
       "static/chunks/webpack.js",
@@ -46,20 +32,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/admin/layout.js"
     ],
-    "/admin/users/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/users/page.js"
-    ],
     "/admin/payments/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/admin/payments/page.js"
     ],
-    "/not-found": [
+    "/admin/subscriptions/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/not-found.js"
+      "static/chunks/app/admin/subscriptions/page.js"
+    ],
+    "/dashboard/payouts/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/payouts/page.js"
     ]
   }
 }
