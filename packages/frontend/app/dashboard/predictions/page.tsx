@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '../../../components/DashboardLayout';
 import { api } from '../../../lib/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import DonutChart from '../../../components/DonutChart';
 
 interface Prediction {
   id: string;
@@ -18,7 +19,21 @@ interface Prediction {
   };
 }
 
+type StatsOverall = {
+  wins: number;
+  losses: number;
+  voids: number;
+  pushes: number;
+  totalCount: number;
+  successRate: number;
+};
+
 const SPORTS_FILTERS = ['All', 'Football', 'Basketball', 'Tennis', 'Soccer', 'Baseball'];
+const PERIODS = [
+  { label: '7d', days: 7 },
+  { label: '30d', days: 30 },
+  { label: '90d', days: 90 },
+];
 
 export default function PredictionsPage() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -27,9 +42,18 @@ export default function PredictionsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  const [statsDays, setStatsDays] = useState(90);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsOverall, setStatsOverall] = useState<StatsOverall | null>(null);
+
   useEffect(() => {
     fetchPredictions();
   }, [selectedSport, currentPage]);
+
+  useEffect(() => {
+    fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSport, statsDays]);
 
   const fetchPredictions = async () => {
     try {
@@ -43,7 +67,6 @@ export default function PredictionsPage() {
         params.append('sport', selectedSport);
       }
 
-      // CHANGED: ползваме /predictions/active
       const response = await api.get(`/predictions/active?${params.toString()}`);
       setPredictions(response.data.data.predictions);
       setTotalPages(response.data.data.pagination.pages);
@@ -55,33 +78,146 @@ export default function PredictionsPage() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true);
+      const params = new URLSearchParams({ days: String(statsDays) });
+      if (selectedSport !== 'All') params.append('sport', selectedSport);
+      const res = await api.get(`/stats/predictions?${params.toString()}`);
+      setStatsOverall(res.data?.data?.overall ?? null);
+    } catch (e: any) {
+      console.error(e);
+      // Не спирай страницата, ако статистиката отсъства
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const donutData = useMemo(() => {
+    const wins = statsOverall?.wins ?? 0;
+    const losses = statsOverall?.losses ?? 0;
+    return [
+      { label: 'Wins', value: wins, color: '#16a34a' }, // green-600
+      { label: 'Losses', value: losses, color: '#dc2626' }, // red-600
+    ];
+  }, [statsOverall]);
+
+  const successRateLabel = useMemo(() => {
+    if (!statsOverall) return undefined;
+    return `${statsOverall.successRate}%`;
+  }, [statsOverall]);
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div>
+        <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-bold text-gray-900">Sports Predictions</h1>
           <p className="text-gray-600">Browse our latest expert predictions</p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-2">
-          {SPORTS_FILTERS.map((sport) => (
-            <button
-              key={sport}
-              onClick={() => {
-                setSelectedSport(sport);
-                setCurrentPage(1);
-              }}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                selectedSport === sport
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {sport}
-            </button>
-          ))}
+        {/* Fancy Stats Panel */}
+        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-r from-primary-50 via-white to-secondary-50 shadow-sm">
+          {/* Decorative gradient blobs */}
+          <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary-200 opacity-30 blur-3xl" />
+          <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-secondary-200 opacity-30 blur-3xl" />
+
+          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+            <div className="flex items-center justify-center">
+              <div className="group hover:scale-[1.02] transition-transform duration-300">
+                <DonutChart
+                  data={donutData}
+                  size={200}
+                  thickness={22}
+                  centerLabel={successRateLabel}
+                  centerSubLabel="Success"
+                />
+                <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#16a34a]" />
+                    <span className="text-gray-700">Wins</span>
+                    <span className="text-gray-500">({statsOverall?.wins ?? 0})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#dc2626]" />
+                    <span className="text-gray-700">Losses</span>
+                    <span className="text-gray-500">({statsOverall?.losses ?? 0})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center md:items-start justify-center gap-3">
+              <div className="text-sm text-gray-500">Filters</div>
+              <div className="flex flex-wrap gap-2">
+                {SPORTS_FILTERS.map((sport) => (
+                  <button
+                    key={sport}
+                    onClick={() => {
+                      setSelectedSport(sport);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 hover:shadow ${
+                      selectedSport === sport
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {sport}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Period:</span>
+                <div className="flex gap-1">
+                  {PERIODS.map((p) => (
+                    <button
+                      key={p.days}
+                      onClick={() => setStatsDays(p.days)}
+                      className={`px-3 py-1.5 rounded-md text-sm transition-all duration-200 hover:shadow ${
+                        statsDays === p.days
+                          ? 'bg-secondary-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 w-full mt-2">
+                <div className="card hover:shadow-md transition-shadow duration-200">
+                  <div className="text-xs text-gray-500">Success Rate</div>
+                  <div className="text-xl font-bold">{statsOverall?.successRate ?? 0}%</div>
+                </div>
+                <div className="card hover:shadow-md transition-shadow duration-200">
+                  <div className="text-xs text-gray-500">Wins</div>
+                  <div className="text-xl font-bold text-green-600">{statsOverall?.wins ?? 0}</div>
+                </div>
+                <div className="card hover:shadow-md transition-shadow duration-200">
+                  <div className="text-xs text-gray-500">Losses</div>
+                  <div className="text-xl font-bold text-red-600">{statsOverall?.losses ?? 0}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center md:justify-end">
+              <div className="rounded-xl border bg-white p-4 shadow-sm hover:shadow transition-shadow duration-200">
+                <div className="text-xs text-gray-500">Note</div>
+                <div className="text-sm text-gray-700 max-w-[240px]">
+                  Statistics are based on settled predictions for the selected period. Void/Push do not affect success rate.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {statsLoading && (
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="animate-pulse h-full w-full bg-gradient-to-b from-transparent via-white/40 to-transparent" />
+            </div>
+          )}
         </div>
 
         {/* Predictions */}
@@ -92,7 +228,10 @@ export default function PredictionsPage() {
         ) : predictions.length > 0 ? (
           <div className="space-y-6">
             {predictions.map((prediction) => (
-              <div key={prediction.id} className="card">
+              <div
+                key={prediction.id}
+                className="card group hover:shadow-md transition-all duration-200 hover:-translate-y-0.5"
+              >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
@@ -116,7 +255,7 @@ export default function PredictionsPage() {
                   </div>
                   
                   <div className="text-right ml-6">
-                    <div className="bg-green-50 p-4 rounded-lg">
+                    <div className="bg-green-50 p-4 rounded-lg group-hover:shadow-inner transition-shadow duration-200">
                       <p className="text-2xl font-bold text-green-600">{prediction.odds}</p>
                       <p className="text-sm text-green-700">Odds</p>
                     </div>

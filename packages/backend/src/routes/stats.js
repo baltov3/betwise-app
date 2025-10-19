@@ -4,7 +4,10 @@ import { PrismaClient } from '@prisma/client';
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/stats/predictions?days=90&sport=<optional>
+/**
+ * GET /api/stats/predictions?days=90&sport=<optional>
+ * Връща агрегирана статистика (Wins/Losses/Void/Push) и Success Rate за период
+ */
 router.get('/predictions', async (req, res) => {
   try {
     const { days = 90, sport } = req.query;
@@ -15,7 +18,7 @@ router.get('/predictions', async (req, res) => {
     const where = {
       settledAt: { gte: from, lte: to },
       result: { in: ['WIN', 'LOSS', 'VOID', 'PUSH'] },
-      ...(sport ? { sport } : {}),
+      ...(sport ? { sport: String(sport) } : {}),
     };
 
     const items = await prisma.prediction.findMany({
