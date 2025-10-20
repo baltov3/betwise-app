@@ -11,6 +11,7 @@ import {
   UsersIcon,
   Bars3Icon,
   XMarkIcon,
+  ChartPieIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -19,6 +20,8 @@ const navigation = [
   { name: 'Subscription', href: '/dashboard/subscription', icon: CreditCardIcon },
   { name: 'Referrals', href: '/dashboard/referrals', icon: UsersIcon },
   { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCardIcon },
+   { name: 'Stats', href: '/dashboard/stats', icon: ChartPieIcon }, // NEW: Stats in sidebar nav
+
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -317,7 +317,7 @@ router.get('/requests', authenticate, requireAdmin, async (req, res) => {
     const showAll = String(req.query.showAll || '').toLowerCase() === 'true';
 
     // Активни за обработка: REQUESTED и FAILED
-    const where = showAll ? {} : { status: { in: ['REQUESTED', 'FAILED'] } };
+    const where = showAll ? {} : { status: { in: ['REQUESTED'] } };
 
     const requests = await prisma.payoutRequest.findMany({
       where,
