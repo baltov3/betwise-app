@@ -63,11 +63,19 @@ export default function AdminPredictionsPage() {
     try {
       await api.post(`/predictions/${id}/settle`, { result: value });
       toast.success('Prediction settled');
+      // След уреждане, тя автоматично ще изчезне заради филтъра по-долу
       fetchPredictions();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to settle');
     }
   };
+
+  // СКРИВАМЕ уредените прогнози
+  const visiblePredictions = predictions.filter((p) => {
+    const isSettled =
+      Boolean(p.settledAt) || (p.result && p.result !== 'PENDING') || p.status === 'FINISHED';
+    return !isSettled;
+  });
 
   return (
     <AdminLayout>
@@ -77,10 +85,9 @@ export default function AdminPredictionsPage() {
           Add New Prediction
         </Link>
       </div>
-
       {loading ? (
         <div>Loading...</div>
-      ) : predictions.length === 0 ? (
+      ) : visiblePredictions.length === 0 ? (
         <div>No predictions found.</div>
       ) : (
         <div className="overflow-x-auto">
@@ -97,13 +104,10 @@ export default function AdminPredictionsPage() {
               </tr>
             </thead>
             <tbody>
-              {predictions.map((p) => {
+              {visiblePredictions.map((p) => {
                 const isPast = new Date(p.matchDate) < new Date();
                 const isSettled =
-                  Boolean(p.settledAt) ||
-                  (p.result && p.result !== 'PENDING') ||
-                  p.status === 'FINISHED';
-
+                  Boolean(p.settledAt) || (p.result && p.result !== 'PENDING') || p.status === 'FINISHED';
                 const canEditOrDelete = !isPast && !isSettled;
                 const canSettle = isPast && !isSettled;
 
@@ -124,21 +128,15 @@ export default function AdminPredictionsPage() {
                           Edit
                         </Link>
                       )}
-
                       {canSettle && (
                         <button onClick={() => settlePrediction(p.id)} className="btn-primary mr-2">
                           Set Result
                         </button>
                       )}
-
                       {canEditOrDelete && (
                         <button onClick={() => deletePrediction(p.id)} className="btn-danger">
                           Delete
                         </button>
-                      )}
-
-                      {isSettled && (
-                        <span className="text-xs text-gray-500">Settled</span>
                       )}
                     </td>
                   </tr>
