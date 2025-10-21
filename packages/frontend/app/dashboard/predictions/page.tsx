@@ -93,7 +93,7 @@ export default function PredictionsPage() {
           <p className="text-gray-600">Browse our latest expert predictions</p>
         </div>
 
-        {/* Цветен Stats панел + ефекти */}
+        {/* Stats панел */}
         <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-r from-primary-50 via-white to-secondary-50 shadow-sm">
           <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary-200 opacity-30 blur-3xl" />
           <div className="pointer-events-none absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-secondary-200 opacity-30 blur-3xl" />
@@ -117,6 +117,7 @@ export default function PredictionsPage() {
               </div>
             </div>
 
+            {/* Филтри */}
             <div className="flex flex-col items-center md:items-start justify-center gap-3">
               <div className="text-sm text-gray-500">Filters</div>
               <div className="flex flex-wrap gap-2">
@@ -168,9 +169,6 @@ export default function PredictionsPage() {
           )}
         </div>
 
-        {/* Въртяща се лента с резултати */}
-        <RotatingMatches days={90} limit={24} intervalMs={2500} />
-
         {/* Predictions */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
@@ -214,6 +212,17 @@ export default function PredictionsPage() {
             <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50">Next</button>
           </div>
         )}
+
+        {/* Recent Results — вече следва периода И спорта */}
+        <div className="mt-6">
+          <RotatingMatches
+            key={`rr-${statsDays}-${selectedSport}`}     // force re-mount при сменен период/спорт
+            days={statsDays}
+            limit={10}
+            sport={selectedSport !== 'All' ? selectedSport : undefined}
+            intervalMs={2500}
+          />
+        </div>
       </div>
     </DashboardLayout>
   );
