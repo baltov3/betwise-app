@@ -46,9 +46,9 @@ export default function AdminPredictionsPage() {
     try {
       await api.delete(`/predictions/${id}`);
       toast.success('Prediction deleted');
-      setPredictions(predictions.filter((p) => p.id !== id));
-    } catch (err) {
-      toast.error('Failed to delete');
+      setPredictions((prev) => prev.filter((p) => p.id !== id));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to delete');
     }
   };
 
@@ -77,6 +77,7 @@ export default function AdminPredictionsPage() {
           Add New Prediction
         </Link>
       </div>
+
       {loading ? (
         <div>Loading...</div>
       ) : predictions.length === 0 ? (
@@ -96,30 +97,53 @@ export default function AdminPredictionsPage() {
               </tr>
             </thead>
             <tbody>
-              {predictions.map((p) => (
-                <tr key={p.id}>
-                  <td className="p-2 border">{p.sport}</td>
-                  <td className="p-2 border">{p.title}</td>
-                  <td className="p-2 border">{new Date(p.matchDate).toLocaleString()}</td>
-                  <td className="p-2 border">{p.odds}</td>
-                  <td className="p-2 border">{p.status ?? 'SCHEDULED'}</td>
-                  <td className="p-2 border">
-                    {p.result ?? 'PENDING'}
-                    {p.settledAt ? ` (at ${new Date(p.settledAt).toLocaleString()})` : ''}
-                  </td>
-                  <td className="p-2 border">
-                    <Link href={`/admin/predictions/edit/${p.id}`} className="btn-secondary mr-2">
-                      Edit
-                    </Link>
-                    <button onClick={() => settlePrediction(p.id)} className="btn-primary mr-2">
-                      Set Result
-                    </button>
-                    <button onClick={() => deletePrediction(p.id)} className="btn-danger">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {predictions.map((p) => {
+                const isPast = new Date(p.matchDate) < new Date();
+                const isSettled =
+                  Boolean(p.settledAt) ||
+                  (p.result && p.result !== 'PENDING') ||
+                  p.status === 'FINISHED';
+
+                const canEditOrDelete = !isPast && !isSettled;
+                const canSettle = isPast && !isSettled;
+
+                return (
+                  <tr key={p.id}>
+                    <td className="p-2 border">{p.sport}</td>
+                    <td className="p-2 border">{p.title}</td>
+                    <td className="p-2 border">{new Date(p.matchDate).toLocaleString()}</td>
+                    <td className="p-2 border">{p.odds}</td>
+                    <td className="p-2 border">{p.status ?? 'SCHEDULED'}</td>
+                    <td className="p-2 border">
+                      {p.result ?? 'PENDING'}
+                      {p.settledAt ? ` (at ${new Date(p.settledAt).toLocaleString()})` : ''}
+                    </td>
+                    <td className="p-2 border">
+                      {canEditOrDelete && (
+                        <Link href={`/admin/predictions/edit/${p.id}`} className="btn-secondary mr-2">
+                          Edit
+                        </Link>
+                      )}
+
+                      {canSettle && (
+                        <button onClick={() => settlePrediction(p.id)} className="btn-primary mr-2">
+                          Set Result
+                        </button>
+                      )}
+
+                      {canEditOrDelete && (
+                        <button onClick={() => deletePrediction(p.id)} className="btn-danger">
+                          Delete
+                        </button>
+                      )}
+
+                      {isSettled && (
+                        <span className="text-xs text-gray-500">Settled</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

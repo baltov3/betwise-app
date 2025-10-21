@@ -1,7 +1,11 @@
 {
-  "/page": "app/page.js",
-  "/login/page": "app/login/page.js",
+  "/not-found": "app/not-found.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/predictions/page": "app/dashboard/predictions/page.js",
+  "/dashboard/payouts/page": "app/dashboard/payouts/page.js",
+  "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
   "/dashboard/stats/page": "app/dashboard/stats/page.js",
   "/admin/page": "app/admin/page.js",
+  "/admin/predictions/new/page": "app/admin/predictions/new/page.js",
   "/admin/predictions/page": "app/admin/predictions/page.js"
 }

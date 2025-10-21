@@ -1,7 +1,7 @@
 import express from 'express';
-import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, requireAdmin, requireSubscription } from '../middleware/auth.js';
+import { body, validationResult } from 'express-validator';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -45,94 +45,6 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Get predictions error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
-
-
-
-/**
- * NEW: Active predictions
- * GET /api/predictions/active?page=1&limit=10&sport=Football
- * Показва прогнози с бъдеща дата (matchDate >= now).
- * Този маршрут работи без нови полета (result/status).
- */
-router.get('/active', async (req, res) => {
-  try {
-    const { page = 1, limit = 10, sport } = req.query;
-    const pageN = parseInt(String(page), 10);
-    const limitN = parseInt(String(limit), 10);
-    const skip = (pageN - 1) * limitN;
-    const now = new Date();
-
-    const where = {
-      matchDate: { gte: now },
-      ...(sport ? { sport } : {}),
-    };
-
-    const [predictions, total] = await Promise.all([
-      prisma.prediction.findMany({
-        where,
-        skip,
-        take: limitN,
-        orderBy: { matchDate: 'asc' },
-        include: {
-          creator: { select: { email: true } },
-        },
-      }),
-      prisma.prediction.count({ where }),
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        predictions,
-        pagination: {
-          page: pageN,
-          limit: limitN,
-          total,
-          pages: Math.ceil(total / limitN) || 1,
-        },
-      },
-    });
-  } catch (err) {
-    console.error('Active predictions error:', err);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-});
-
-// Get single prediction
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const prediction = await prisma.prediction.findUnique({
-      where: { id },
-      include: {
-        creator: {
-          select: {
-            email: true,
-          }
-        }
-      }
-    });
-
-    if (!prediction) {
-      return res.status(404).json({
-        success: false,
-        message: 'Prediction not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { prediction }
-    });
-  } catch (error) {
-    console.error('Get prediction error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -211,9 +123,21 @@ router.put('/:id', authenticate, requireAdmin, [
     }
 
     const { id } = req.params;
-    const updateData = {};
 
-    // Only include provided fields
+    // NEW: Block editing if past or settled
+    const current = await prisma.prediction.findUnique({ where: { id } });
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Prediction not found' });
+    }
+    const now = new Date();
+    const isPast = current.matchDate < now;
+    const isSettled = Boolean(current.settledAt) || current.result !== 'PENDING' || current.status === 'FINISHED';
+
+    if (isPast || isSettled) {
+      return res.status(400).json({ success: false, message: 'Cannot edit a prediction after the match has passed or the prediction is settled' });
+    }
+
+    const updateData = {};
     if (req.body.sport) updateData.sport = req.body.sport;
     if (req.body.title) updateData.title = req.body.title;
     if (req.body.description) updateData.description = req.body.description;
@@ -238,7 +162,7 @@ router.put('/:id', authenticate, requireAdmin, [
       data: { prediction }
     });
   } catch (error) {
-    if (error.code === 'P2025') {
+    if (error?.code === 'P2025') {
       return res.status(404).json({
         success: false,
         message: 'Prediction not found'
@@ -252,10 +176,71 @@ router.put('/:id', authenticate, requireAdmin, [
   }
 });
 
+// ...
+// NEW: Active predictions
+// GET /api/predictions/active?page=1&limit=10&sport=Football
+router.get('/active', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, sport } = req.query;
+    const pageN = parseInt(String(page), 10);
+    const limitN = parseInt(String(limit), 10);
+    const skip = (pageN - 1) * limitN;
+    const now = new Date();
+
+    const where = {
+      matchDate: { gte: now },
+      ...(sport ? { sport } : {}),
+    };
+
+    const [predictions, total] = await Promise.all([
+      prisma.prediction.findMany({
+        where,
+        skip,
+        take: limitN,
+        orderBy: { matchDate: 'asc' },
+        include: {
+          creator: { select: { email: true } },
+        },
+      }),
+      prisma.prediction.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        predictions,
+        pagination: {
+          page: pageN,
+          limit: limitN,
+          total,
+          pages: Math.ceil(total / limitN) || 1,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('Active predictions error:', err);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+
 // Delete prediction (admin only)
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
+
+    // NEW: Block deletion if past or settled
+    const current = await prisma.prediction.findUnique({ where: { id } });
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Prediction not found' });
+    }
+    const now = new Date();
+    const isPast = current.matchDate < now;
+    const isSettled = Boolean(current.settledAt) || current.result !== 'PENDING' || current.status === 'FINISHED';
+
+    if (isPast || isSettled) {
+      return res.status(400).json({ success: false, message: 'Cannot delete a prediction after the match has passed or the prediction is settled' });
+    }
 
     await prisma.prediction.delete({
       where: { id }
@@ -266,7 +251,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       message: 'Prediction deleted successfully'
     });
   } catch (error) {
-    if (error.code === 'P2025') {
+    if (error?.code === 'P2025') {
       return res.status(404).json({
         success: false,
         message: 'Prediction not found'

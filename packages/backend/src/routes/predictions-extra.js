@@ -1,12 +1,11 @@
-
-        import express from 'express';
+import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/predictions/results?days=90&sport=<optional>
+// GET /api/predictions/results?days=90&sport=<optional>  (съществуващ)
 router.get('/results', async (req, res) => {
   try {
     const { page = 1, limit = 10, sport, days = 90 } = req.query;
@@ -54,7 +53,56 @@ router.get('/results', async (req, res) => {
   }
 });
 
-// POST /api/predictions/:id/settle  { result: 'WIN' | 'LOSS' | 'VOID' | 'PUSH' }
+// NEW: GET /api/predictions/to-settle?page=1&limit=100&sport=<optional>
+// Връща мачове, които са минали, но НЕ са уредени (result=PENDING, settledAt=null)
+router.get('/to-settle', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, sport } = req.query;
+    const pageN = parseInt(String(page), 10);
+    const limitN = parseInt(String(limit), 10);
+    const skip = (pageN - 1) * limitN;
+
+    const now = new Date();
+
+    const where = {
+      matchDate: { lt: now },
+      result: 'PENDING',
+      settledAt: null,
+      ...(sport ? { sport: String(sport) } : {}),
+    };
+
+    const [predictions, total] = await Promise.all([
+      prisma.prediction.findMany({
+        where,
+        skip,
+        take: limitN,
+        orderBy: { matchDate: 'desc' },
+        include: {
+          creator: { select: { email: true } },
+        },
+      }),
+      prisma.prediction.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        predictions,
+        pagination: {
+          page: pageN,
+          limit: limitN,
+          total,
+          pages: Math.ceil(total / limitN) || 1,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('To-settle predictions error:', err);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// POST /api/predictions/:id/settle (съществуващ)
 router.post('/:id/settle', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
