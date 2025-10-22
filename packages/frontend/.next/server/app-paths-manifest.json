@@ -1,7 +1,11 @@
 {
-  "/dashboard/stats/page": "app/dashboard/stats/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/payouts/page": "app/dashboard/payouts/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/referrals/page": "app/dashboard/referrals/page.js",
+  "/page": "app/page.js",
+  "/admin/page": "app/admin/page.js",
   "/admin/predictions/page": "app/admin/predictions/page.js",
-  "/dashboard/predictions/page": "app/dashboard/predictions/page.js"
+  "/admin/predictions/new/page": "app/admin/predictions/new/page.js",
+  "/admin/payments/page": "app/admin/payments/page.js",
+  "/admin/users/page": "app/admin/users/page.js"
 }

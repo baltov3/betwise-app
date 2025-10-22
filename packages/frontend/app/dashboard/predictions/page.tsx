@@ -217,10 +217,9 @@ export default function PredictionsPage() {
         <div className="mt-6">
           <RotatingMatches
             key={`rr-${statsDays}-${selectedSport}`}     // force re-mount при сменен период/спорт
-            days={statsDays}
-            limit={10}
-            sport={selectedSport !== 'All' ? selectedSport : undefined}
-            intervalMs={2500}
+            {...((
+              { days: statsDays, limit: 10, intervalMs: 2500, ...(selectedSport !== 'All' ? { sport: selectedSport } : {}) }
+            ) as any)}
           />
         </div>
       </div>
