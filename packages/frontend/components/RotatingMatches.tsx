@@ -18,13 +18,13 @@ export default function RotatingMatches({
   days = 90,
   limit = 24,
   sport,
-  // Авто-маркировка (посока/скорост)
+  // Авто-скрол настройки
   direction = 'ltr',
   speedPxPerSec = 50,
-  // Опресняване на данните
+  // периодично опресняване на данните
   refreshMs = 60000,
-  // Ефект за "пулс" на всеки 3-ти елемент
-  pulseIntervalMs = 2500,
+  // хронологично подреждане (по старо -> ново)
+  chronological = true,
 }: {
   days?: number;
   limit?: number;
@@ -32,15 +32,12 @@ export default function RotatingMatches({
   direction?: Direction;
   speedPxPerSec?: number;
   refreshMs?: number;
-  pulseIntervalMs?: number;
+  chronological?: boolean;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Пулс за визуален ефект
-  const [pulseIdx, setPulseIdx] = useState(0);
-
-  // Маркировка (marquee) refs/състояния
+  // Маркировка (marquee)
   const containerRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [x, setX] = useState<number>(0);
@@ -49,12 +46,12 @@ export default function RotatingMatches({
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
 
-  // Drag/Swipe състояния
+  // Drag/Swipe
   const draggingRef = useRef(false);
   const dragStartPointerXRef = useRef(0);
   const dragStartXRef = useRef(0);
 
-  // Зареждане на данни по период/спорт
+  // 1) Зареждане на данни за избран период/спорт
   useEffect(() => {
     let cancelled = false;
 
@@ -69,7 +66,18 @@ export default function RotatingMatches({
         if (sport) qs.append('sport', sport);
         const res = await api.get(`/predictions/results?${qs.toString()}`);
         if (cancelled) return;
-        setItems(res.data?.data?.predictions ?? []);
+        const raw: Item[] = res.data?.data?.predictions ?? [];
+
+        // хронологично подреждане, ако е поискано
+        const sorted = chronological
+          ? [...raw].sort((a, b) => {
+              const ta = new Date(a.settledAt ?? a.matchDate).getTime();
+              const tb = new Date(b.settledAt ?? b.matchDate).getTime();
+              return ta - tb; // старо -> ново
+            })
+          : raw;
+
+        setItems(sorted);
       } catch {
         // ignore
       } finally {
@@ -79,36 +87,31 @@ export default function RotatingMatches({
 
     load();
 
-    // Периодично опресняване
     let t: any;
     if (refreshMs > 0) {
       t = setInterval(load, refreshMs);
     }
-
     return () => {
       cancelled = true;
       if (t) clearInterval(t);
     };
-  }, [days, limit, sport, refreshMs]);
+  }, [days, limit, sport, refreshMs, chronological]);
 
-  // Дублиране за безкрайна лента
+  // 2) Безкрайна лента чрез дублиране
   const marqueeItems = useMemo(() => {
     if (!items || items.length === 0) return [];
     return [...items, ...items];
   }, [items]);
 
-  // Измерване на половин трек (оригиналният списък, преди дублиране)
+  // 3) Измерване ширина на половин трек
   useEffect(() => {
     const measure = () => {
       if (!trackRef.current) return;
       const total = trackRef.current.scrollWidth;
       halfTrackWidthRef.current = total / 2;
-      // Подравняваме началната позиция спрямо посоката
       xRef.current = direction === 'ltr' ? -halfTrackWidthRef.current : 0;
       setX(xRef.current);
     };
-
-    // Щипка таймаут, за да се е рендерирало съдържанието
     const t = setTimeout(measure, 0);
     window.addEventListener('resize', measure);
     return () => {
@@ -117,7 +120,7 @@ export default function RotatingMatches({
     };
   }, [marqueeItems.length, direction]);
 
-  // Авто-скрол (requestAnimationFrame)
+  // 4) Авто-скрол
   useEffect(() => {
     let lastTs = performance.now();
 
@@ -126,20 +129,14 @@ export default function RotatingMatches({
       lastTs = ts;
 
       const halfW = halfTrackWidthRef.current;
-
       if (!pausedRef.current && halfW > 0 && !draggingRef.current) {
         const delta = speedPxPerSec * dt;
-
         if (direction === 'ltr') {
           xRef.current += delta;
-          if (xRef.current >= 0) {
-            xRef.current = -halfW;
-          }
+          if (xRef.current >= 0) xRef.current = -halfW;
         } else {
           xRef.current -= delta;
-          if (xRef.current <= -halfW) {
-            xRef.current = 0;
-          }
+          if (xRef.current <= -halfW) xRef.current = 0;
         }
         setX(xRef.current);
       }
@@ -154,84 +151,71 @@ export default function RotatingMatches({
     };
   }, [direction, speedPxPerSec]);
 
-  // Пулс ефект за всеки 3-ти (не е задължителен)
-  useEffect(() => {
-    const t = setInterval(() => setPulseIdx((i) => i + 1), pulseIntervalMs);
-    return () => clearInterval(t);
-  }, [pulseIntervalMs]);
-
-  // Помощна: wrap в диапазона [-halfW, 0]
+  // помощна: wrap в [-halfW, 0]
   const wrapX = (val: number) => {
     const halfW = halfTrackWidthRef.current || 0;
     if (halfW <= 0) return val;
-    // нормализиране в затворен диапазон [-halfW, 0]
     while (val > 0) val -= halfW;
     while (val < -halfW) val += halfW;
     return val;
   };
 
-  // Drag handlers (mouse)
+  // 5) Mouse drag
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const el = containerRef.current;
+    if (!el) return;
 
-    const onMouseDown = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent) => {
       draggingRef.current = true;
-      pausedRef.current = true; // пауза на авто-скрола по време на drag
+      pausedRef.current = true;
       dragStartPointerXRef.current = e.clientX;
       dragStartXRef.current = xRef.current;
-      container.classList.add('cursor-grabbing');
+      el.classList.add('cursor-grabbing');
       e.preventDefault();
     };
-
-    const onMouseMove = (e: MouseEvent) => {
+    const onMove = (e: MouseEvent) => {
       if (!draggingRef.current) return;
       const dx = e.clientX - dragStartPointerXRef.current;
-      // Положителен dx = плъзгане надясно => местим лентата надясно => увеличаваме x
       let newX = dragStartXRef.current + dx;
       newX = wrapX(newX);
       xRef.current = newX;
       setX(newX);
     };
-
-    const finish = () => {
+    const onUp = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
-      container.classList.remove('cursor-grabbing');
-      // кратко забавяне преди да пуснем авто-скрол, за да не “дръпне” веднага
+      el.classList.remove('cursor-grabbing');
       setTimeout(() => {
         if (!draggingRef.current) pausedRef.current = false;
       }, 80);
     };
 
-    container.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', finish);
-    container.addEventListener('mouseleave', finish);
-
+    el.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    el.addEventListener('mouseleave', onUp);
     return () => {
-      container.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', finish);
-      container.removeEventListener('mouseleave', finish);
+      el.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      el.removeEventListener('mouseleave', onUp);
     };
   }, []);
 
-  // Touch handlers (mobile)
+  // 6) Touch drag
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const el = containerRef.current;
+    if (!el) return;
 
-    const onTouchStart = (e: TouchEvent) => {
+    const onStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       draggingRef.current = true;
       pausedRef.current = true;
       dragStartPointerXRef.current = e.touches[0].clientX;
       dragStartXRef.current = xRef.current;
-      container.classList.add('cursor-grabbing');
+      el.classList.add('cursor-grabbing');
     };
-
-    const onTouchMove = (e: TouchEvent) => {
+    const onMove = (e: TouchEvent) => {
       if (!draggingRef.current || e.touches.length !== 1) return;
       const dx = e.touches[0].clientX - dragStartPointerXRef.current;
       let newX = dragStartXRef.current + dx;
@@ -239,26 +223,24 @@ export default function RotatingMatches({
       xRef.current = newX;
       setX(newX);
     };
-
-    const finish = () => {
+    const onEnd = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
-      container.classList.remove('cursor-grabbing');
+      el.classList.remove('cursor-grabbing');
       setTimeout(() => {
         if (!draggingRef.current) pausedRef.current = false;
       }, 80);
     };
 
-    container.addEventListener('touchstart', onTouchStart, { passive: true });
-    container.addEventListener('touchmove', onTouchMove, { passive: true });
-    container.addEventListener('touchend', finish);
-    container.addEventListener('touchcancel', finish);
-
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: true });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
     return () => {
-      container.removeEventListener('touchstart', onTouchStart);
-      container.removeEventListener('touchmove', onTouchMove);
-      container.removeEventListener('touchend', finish);
-      container.removeEventListener('touchcancel', finish);
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
     };
   }, []);
 
@@ -280,7 +262,7 @@ export default function RotatingMatches({
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-700">Recent Results</h3>
         </div>
-        <div className="text-gray-500 text-sm">No recent results.</div>
+        <div className="text-gray-500 text-sm">No recent results for the selected period.</div>
       </div>
     );
   }
@@ -295,7 +277,7 @@ export default function RotatingMatches({
       <div
         ref={containerRef}
         className="relative overflow-hidden"
-        style={{ width: '100%', touchAction: 'pan-y' }} // оставяме вертикален скрол на страницата
+        style={{ width: '100%', touchAction: 'pan-y' }}
         aria-label="Recent results ticker"
       >
         <div
@@ -307,7 +289,6 @@ export default function RotatingMatches({
           }}
         >
           {marqueeItems.map((it, i) => {
-            const highlight = ((i + pulseIdx) % 3) === 0;
             const color =
               it.result === 'WIN' ? 'bg-green-50 border-green-200' :
               it.result === 'LOSS' ? 'bg-red-50 border-red-200' :
@@ -323,8 +304,7 @@ export default function RotatingMatches({
             return (
               <div
                 key={it.id + '-' + i}
-                className={`min-w-[220px] max-w-[220px] border rounded-lg p-3 transition-transform duration-300 ${color} ${highlight ? 'scale-[1.03] shadow-md' : ''}`}
-                style={{ transformOrigin: 'center center' }}
+                className={`min-w-[220px] max-w-[220px] border rounded-lg p-3 ${color}`}
               >
                 <div className="text-xs text-gray-500">{it.sport}</div>
                 <div className="text-sm font-semibold text-gray-900 line-clamp-2">{it.title}</div>

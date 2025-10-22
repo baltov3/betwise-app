@@ -16,11 +16,12 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+     { name: 'Stats', href: '/dashboard/stats', icon: ChartPieIcon }, // NEW: Stats in sidebar nav
   { name: 'Predictions', href: '/dashboard/predictions', icon: ChartBarIcon },
   { name: 'Subscription', href: '/dashboard/subscription', icon: CreditCardIcon },
   { name: 'Referrals', href: '/dashboard/referrals', icon: UsersIcon },
   { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCardIcon },
-   { name: 'Stats', href: '/dashboard/stats', icon: ChartPieIcon }, // NEW: Stats in sidebar nav
+
 
 ];
 

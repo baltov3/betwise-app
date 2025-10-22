@@ -51,6 +51,9 @@ export default function StatsPage() {
   const [bySport, setBySport] = useState<SportRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Ново: поддържаме пълен списък спортове за чиповете (не се влияе от филтъра по sport)
+  const [allSports, setAllSports] = useState<string[]>([]);
+
   const winsAnimated = useCountUp(overall?.wins ?? 0);
   const lossesAnimated = useCountUp(overall?.losses ?? 0);
   const rateAnimated = useCountUp(Math.round(overall?.successRate ?? 0));
@@ -63,11 +66,12 @@ export default function StatsPage() {
     [overall]
   );
 
+  // Чиповете вече са постоянни и идват от allSports
   const sportChips = useMemo(() => {
-    const names = ['All', ...bySport.map((s) => s.sport).filter((v, i, arr) => arr.indexOf(v) === i)];
-    return names;
-  }, [bySport]);
+    return ['All', ...allSports];
+  }, [allSports]);
 
+  // Зарежда метрики според текущите days и sport
   const load = async () => {
     try {
       setLoading(true);
@@ -83,10 +87,29 @@ export default function StatsPage() {
     }
   };
 
+  // Ново: зарежда ПЪЛЕН списък от спортове за чиповете за дадения период (без филтър по sport)
+  const loadSportsList = async () => {
+    try {
+      const params = new URLSearchParams({ days: String(days) });
+      const res = await api.get(`/stats/predictions?${params.toString()}`);
+      const sportsRaw: string[] = (res.data?.data?.bySport ?? []).map((s: SportRow) => s.sport);
+      const unique = sportsRaw.filter((v, i, arr) => arr.indexOf(v) === i);
+      setAllSports(unique);
+    } catch (e: any) {
+      // soft-fail — запази предишния списък, за да останат чиповете видими
+    }
+  };
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, sport]);
+
+  // Когато се промени периодът, презареди пълния списък спортове
+  useEffect(() => {
+    loadSportsList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   return (
     <DashboardLayout>
@@ -214,7 +237,14 @@ export default function StatsPage() {
         </div>
 
         {/* Rotating strip of matches (every 3rd pops) */}
-        <RotatingMatches days={days} limit={24} sport={sport !== 'All' ? sport : undefined} direction="ltr"  speedPxPerSec={60} refreshMs={60000}  />
+        <RotatingMatches
+          days={days}
+          limit={24}
+          sport={sport !== 'All' ? sport : undefined}
+          direction="ltr"
+          speedPxPerSec={60}
+          refreshMs={60000}
+        />
       </div>
     </DashboardLayout>
   );
