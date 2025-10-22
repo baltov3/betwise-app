@@ -214,7 +214,7 @@ export default function StatsPage() {
         </div>
 
         {/* Rotating strip of matches (every 3rd pops) */}
-        <RotatingMatches days={days} limit={24} intervalMs={2500} />
+        <RotatingMatches days={days} limit={24} sport={sport !== 'All' ? sport : undefined} direction="ltr"  speedPxPerSec={60} refreshMs={60000}  />
       </div>
     </DashboardLayout>
   );
