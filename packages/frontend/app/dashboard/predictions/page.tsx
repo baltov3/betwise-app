@@ -215,11 +215,15 @@ export default function PredictionsPage() {
 
         {/* Recent Results — вече следва периода И спорта */}
         <div className="mt-6">
-          <RotatingMatches
-            key={`rr-${statsDays}-${selectedSport}`}     // force re-mount при сменен период/спорт
-            {...((
-              { days: statsDays, limit: 10, intervalMs: 2500, ...(selectedSport !== 'All' ? { sport: selectedSport } : {}) }
-            ) as any)}
+           <RotatingMatches
+            key={`rr-${statsDays}-${selectedSport}`} // force re-mount при смяна
+            days={statsDays}
+            limit={24}
+            sport={selectedSport !== 'All' ? selectedSport : undefined}
+            direction="ltr"
+            speedPxPerSec={60}
+            refreshMs={60000}
+            chronological={true}
           />
         </div>
       </div>

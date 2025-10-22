@@ -1,8 +1,7 @@
 {
   "/dashboard/predictions/page": "app/dashboard/predictions/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
-  "/admin/page": "app/admin/page.js",
   "/admin/predictions/page": "app/admin/predictions/page.js",
+  "/admin/page": "app/admin/page.js",
   "/admin/predictions/new/page": "app/admin/predictions/new/page.js"
 }
