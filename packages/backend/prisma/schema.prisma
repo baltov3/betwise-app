@@ -50,6 +50,7 @@ model User {
   referredBy    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+    userAgreements  UserAgreement[]
 
   // Personal data
   firstName     String?
@@ -189,4 +190,45 @@ model PayoutRequest {
   user User @relation(fields: [userId], references: [id])
 
   @@map("payout_requests")
+}
+
+enum LegalDocumentType {
+  TERMS
+  PRIVACY
+  AGE
+  REFERRAL
+  COOKIES
+  REFUND
+}
+
+model LegalDocument {
+  id          String            @id @default(uuid())
+  type        LegalDocumentType
+  version     String
+  title       String
+  contentUrl  String?           // URL към HTML/PDF или slug
+  effectiveAt DateTime
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  userAgreements UserAgreement[]
+
+  @@unique([type, version])
+  @@map("legal_documents")
+}
+
+model UserAgreement {
+  id           String   @id @default(uuid())
+  userId       String
+  documentId   String
+  agreedAt     DateTime @default(now())
+  ip           String?
+  userAgent    String?
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document LegalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentId])
+  @@map("user_agreements")
 }

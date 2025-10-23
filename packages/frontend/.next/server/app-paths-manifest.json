@@ -1,8 +1,6 @@
 {
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/stats/page": "app/dashboard/stats/page.js",
-  "/login/page": "app/login/page.js",
-  "/dashboard/predictions/page": "app/dashboard/predictions/page.js",
-  "/admin/predictions/page": "app/admin/predictions/page.js",
-  "/admin/predictions/new/page": "app/admin/predictions/new/page.js"
+  "/register/page": "app/register/page.js",
+  "/page": "app/page.js",
+  "/pricing/page": "app/pricing/page.js",
+  "/login/page": "app/login/page.js"
 }

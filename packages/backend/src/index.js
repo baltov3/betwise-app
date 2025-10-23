@@ -15,6 +15,7 @@ import payoutsRoutes from './routes/payouts.js';
 import stripeWebhookRoutes from './routes/stripe-webhook.js';
 import predictionsExtraRoutes from './routes/predictions-extra.js';
 import statsRoutes from './routes/stats.js';
+import legalRoutes from './routes/legal.js'; 
 
 dotenv.config();
 
@@ -57,8 +58,9 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/predictions', predictionsExtraRoutes); // NEW: /active, /results, /:id/settle
+app.use('/api/predictions', predictionsExtraRoutes); 
 app.use('/api/stats', statsRoutes);
+app.use('/api/legal', legalRoutes);
 
 app.use('/api/payouts', payoutsRoutes);
 

@@ -18,6 +18,12 @@
     "db:seed": "npm run db:seed --workspace=backend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@prisma/client": "^5.22.0",
+    "@types/react-router-dom": "^5.3.3",
+    "concurrently": "^8.2.2",
+    "prisma": "^5.22.0"
+  },
+  "dependencies": {
+    "react-router-dom": "^7.9.4"
   }
 }
