@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRightIcon, ChartBarIcon, GiftIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { ArrowRightIcon, ChartBarIcon, GiftIcon, ShieldCheckIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 export default function HomePage() {
   const features = [
@@ -35,6 +35,18 @@ export default function HomePage() {
               <Link href="/pricing" className="text-gray-700 hover:text-primary-600">
                 Pricing
               </Link>
+
+              {/* NEW: красив бутон „Правни документи“ */}
+              <Link
+                href="/legal"
+                className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-4 py-2 text-sm font-medium text-primary-700 shadow-sm transition
+                           hover:-translate-y-0.5 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-800 hover:shadow-md"
+                aria-label="Правни документи"
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                Правни документи
+              </Link>
+
               <Link href="/login" className="btn-secondary">
                 Login
               </Link>
@@ -58,11 +70,25 @@ export default function HomePage() {
               Join thousands of successful bettors who trust our premium predictions.
               Get started today and earn through our referral program.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Link href="/register" className="btn bg-white text-primary-600 hover:bg-gray-50 px-8 py-3 text-lg">
+            <div className="mt-10 flex items-center justify-center gap-x-4 sm:gap-x-6">
+              <Link
+                href="/register"
+                className="btn bg-white text-primary-600 hover:bg-gray-50 px-8 py-3 text-lg shadow transition hover:-translate-y-0.5 hover:shadow-lg"
+              >
                 Get Started
                 <ArrowRightIcon className="ml-2 h-5 w-5" />
               </Link>
+
+              {/* NEW: втори CTA към правни документи */}
+              <Link
+                href="/legal"
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3 text-white ring-1 ring-white/40 backdrop-blur transition
+                           hover:-translate-y-0.5 hover:bg-white/15 hover:shadow-lg"
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                Правни документи
+              </Link>
+
               <Link href="/pricing" className="text-white hover:text-gray-200">
                 View Pricing <span aria-hidden="true">→</span>
               </Link>
@@ -98,34 +124,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="bg-gray-50 py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl lg:max-w-none">
-            <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Trusted by thousands of users worldwide
-              </h2>
-            </div>
-            <dl className="mt-16 grid grid-cols-1 gap-0.5 overflow-hidden rounded-2xl text-center sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                { name: 'Active Users', value: '10,000+' },
-                { name: 'Predictions Made', value: '50,000+' },
-                { name: 'Success Rate', value: '75%' },
-                { name: 'Referral Earnings', value: '$100K+' },
-              ].map((stat) => (
-                <div key={stat.name} className="flex flex-col bg-white p-8">
-                  <dt className="text-sm font-semibold leading-6 text-gray-600">{stat.name}</dt>
-                  <dd className="order-first text-3xl font-semibold tracking-tight text-primary-600">
-                    {stat.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </div>
-      </div>
-
       {/* CTA */}
       <div className="bg-primary-600">
         <div className="px-6 py-24 sm:px-6 sm:py-32 lg:px-8">
@@ -136,10 +134,21 @@ export default function HomePage() {
             <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-gray-100">
               Join Betwise today and get access to premium predictions plus earn through referrals.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Link href="/register" className="btn bg-white text-primary-600 hover:bg-gray-50 px-8 py-3">
+            <div className="mt-10 flex items-center justify-center gap-x-4">
+              <Link href="/register" className="btn bg-white text-primary-600 hover:bg-gray-50 px-8 py-3 transition hover:-translate-y-0.5 hover:shadow-lg">
                 Get started
               </Link>
+
+              {/* NEW: бърз линк в CTA към /legal */}
+              <Link
+                href="/legal"
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3 text-white ring-1 ring-white/40 backdrop-blur transition
+                           hover:-translate-y-0.5 hover:bg-white/15 hover:shadow-lg"
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                Правни документи
+              </Link>
+
               <Link href="/pricing" className="text-white hover:text-gray-200">
                 Learn more <span aria-hidden="true">→</span>
               </Link>
@@ -155,13 +164,17 @@ export default function HomePage() {
             <Link href="/pricing" className="text-gray-400 hover:text-gray-500">
               Pricing
             </Link>
+            {/* NEW: линк във футъра */}
+            <Link href="/legal" className="text-gray-400 hover:text-gray-500">
+              Правни документи
+            </Link>
             <Link href="/login" className="text-gray-400 hover:text-gray-500">
               Login
             </Link>
           </div>
           <div className="mt-8 md:order-1 md:mt-0">
             <p className="text-center text-xs leading-5 text-gray-500">
-              &copy; 2024 Betwise. All rights reserved.
+              &copy; {new Date().getFullYear()} Betwise. All rights reserved.
             </p>
           </div>
         </div>
