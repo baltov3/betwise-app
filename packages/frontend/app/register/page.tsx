@@ -2,35 +2,40 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CountrySelect } from './CountrySelect';
+import { DocumentTextIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+
+type LegalType = 'TERMS' | 'PRIVACY' | 'AGE' | 'REFERRAL' | 'COOKIES' | 'REFUND';
+type LegalDoc = { type: LegalType; title: string; version: string; effectiveAt: string; url: string };
 
 interface RegisterForm {
   email: string;
   password: string;
   confirmPassword: string;
   referralCode: string;
-
   firstName: string;
   lastName: string;
-  birthDate: string; // YYYY-MM-DD
+  birthDate: string;
   age: number;
-
   addressLine1: string;
   addressLine2?: string;
   city: string;
   state?: string;
   postalCode: string;
   country: string;
-
-  acceptPrivacy?: boolean;
+  acceptLegal?: boolean;
+  isAdult?: boolean;
 }
 
-export default function RegisterPage() {
+function RegisterInner() {
   const [isLoading, setIsLoading] = useState(false);
+  const [legalVersions, setLegalVersions] = useState<Record<LegalType, string> | null>(null);
+  const [mounted, setMounted] = useState(false);
   const { register: authRegister } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,30 +51,60 @@ export default function RegisterPage() {
     defaultValues: {
       referralCode: referralCodeFromUrl || '',
       country: 'BG',
+      acceptLegal: false,
+      isAdult: false,
     },
   });
 
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
-    if (referralCodeFromUrl) {
-      setValue('referralCode', referralCodeFromUrl);
-    }
+    if (referralCodeFromUrl) setValue('referralCode', referralCodeFromUrl);
   }, [referralCodeFromUrl, setValue]);
+
+  useEffect(() => {
+    async function loadDocs() {
+      try {
+        const res = await fetch('/api/legal/legal-documents');
+        if (!res.ok) throw new Error('Failed to load legal documents');
+        const data: LegalDoc[] = await res.json();
+        const map = data.reduce((acc, d) => {
+          acc[d.type] = d.version;
+          return acc;
+        }, {} as Record<LegalType, string>);
+        const required: LegalType[] = ['TERMS', 'PRIVACY', 'AGE', 'REFERRAL', 'COOKIES', 'REFUND'];
+        for (const t of required) if (!map[t]) throw new Error(`Missing active version for ${t}`);
+        setLegalVersions(map);
+      } catch (e: any) {
+        console.error(e);
+        toast.error(e.message || 'Cannot load legal documents');
+      }
+    }
+    loadDocs();
+  }, []);
 
   const password = watch('password');
 
-  const onSubmit = async (data: RegisterForm) => {
+  async function onSubmit(data: RegisterForm) {
     if (data.password !== data.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    if (!data.acceptPrivacy) {
-      toast.error('Моля, приемете Политиката за поверителност.');
+    if (!data.acceptLegal) {
+      toast.error('Моля, приемете Правните документи.');
+      return;
+    }
+    if (!data.isAdult) {
+      toast.error('Моля, потвърдете, че сте навършили 18 години.');
+      return;
+    }
+    if (!legalVersions) {
+      toast.error('Липсват версии на правните документи. Опитайте отново.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { stripeOnboardingUrl } = await authRegister({
+      const payload = {
         email: data.email,
         password: data.password,
         referralCode: data.referralCode,
@@ -83,22 +118,29 @@ export default function RegisterPage() {
         state: data.state,
         postalCode: data.postalCode,
         country: data.country,
-      });
+        ageConfirmed: true,
+        consents: {
+          TERMS: legalVersions.TERMS,
+          PRIVACY: legalVersions.PRIVACY,
+          AGE: legalVersions.AGE,
+          REFERRAL: legalVersions.REFERRAL,
+          COOKIES: legalVersions.COOKIES,
+          REFUND: legalVersions.REFUND,
+        },
+      };
 
+      const { stripeOnboardingUrl } = await authRegister(payload);
       toast.success('Account created successfully!');
-
-      // Ако има onboarding линк -> пращаме потребителя да довърши Stripe KYC
-      if (stripeOnboardingUrl) {
-        window.location.href = stripeOnboardingUrl;
-      } else {
-        router.push('/dashboard');
-      }
+      if (stripeOnboardingUrl) window.location.href = stripeOnboardingUrl;
+      else router.push('/dashboard');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error.message || 'Registration failed');
     } finally {
       setIsLoading(false);
     }
-  };
+  }
+
+  if (!mounted) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -187,9 +229,9 @@ export default function RegisterPage() {
                   <input {...register('birthDate', { required: 'Birth date is required' })} type="date" className="input mt-1" />
                   {errors.birthDate && <p className="mt-1 text-sm text-red-600">{errors.birthDate.message}</p>}
                 </div>
-                                <div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Age</label>
-                  <input {...register('age', { required: 'Age is required', valueAsNumber: true, min: { value: 0, message: 'Invalid age' } })} type="number" className="input mt-1" placeholder="Minimal age is 18" />
+                  <input {...register('age', { required: 'Age is required', valueAsNumber: true, min: { value: 0, message: 'Invalid age' } })} type="number" className="input mt-1" placeholder="18+" />
                   {errors.age && <p className="mt-1 text-sm text-red-600">{errors.age.message}</p>}
                 </div>
               </div>
@@ -231,14 +273,45 @@ export default function RegisterPage() {
             </div>
 
             {/* Consent */}
-            <div className="flex items-start">
-              <input id="acceptPrivacy" type="checkbox" className="mt-1 mr-2" {...register('acceptPrivacy', { required: true })} />
-              <label htmlFor="acceptPrivacy" className="text-sm text-gray-600">I agree to the Terms of Service and Privacy Policy.</label>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <input id="acceptLegal" type="checkbox" className="mt-1 mr-2"
+                  {...register('acceptLegal', { required: true })} />
+                <label htmlFor="acceptLegal" className="text-sm text-gray-700">
+                  Съгласен/на съм с <Link href="/legal" className="text-primary-600 hover:underline" target="_blank">Правните документи</Link>
+                  {' '}(Общи условия, Поверителност, Възрастово ограничение, Партньорска програма, Бисквитки, Отказ и възстановяване).
+                </label>
+              </div>
+              {errors.acceptLegal && <p className="text-sm text-red-600">Трябва да приемете Правните документи.</p>}
+
+              <div className="flex items-start">
+                <input id="isAdult" type="checkbox" className="mt-1 mr-2"
+                  {...register('isAdult', { required: true })} />
+                <label htmlFor="isAdult" className="text-sm text-gray-700">
+                  Потвърждавам, че съм навършил/а 18 години.
+                </label>
+              </div>
+              {errors.isAdult && <p className="text-sm text-red-600">Трябва да потвърдите, че сте 18+.</p>}
+
+              {/* Quick links */}
+              <div className="pt-2">
+                <p className="mb-2 text-sm text-gray-600 flex items-center gap-2">
+                  <ShieldCheckIcon className="h-4 w-4 text-primary-500" />
+                  Бързи линкове към документите:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/legal#tos" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Общи условия</Link>
+                  <Link href="/legal#privacy" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Поверителност</Link>
+                  <Link href="/legal#age" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Възраст</Link>
+                  <Link href="/legal#referral" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Партньорска</Link>
+                  <Link href="/legal#cookies" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Бисквитки</Link>
+                  <Link href="/legal#refunds" className="chip-btn"><DocumentTextIcon className="h-4 w-4" /> Отказ/възстановяване</Link>
+                </div>
+              </div>
             </div>
-            {errors.acceptPrivacy && <p className="mt-1 text-sm text-red-600">You must accept the Privacy Policy.</p>}
 
             <div>
-              <button type="submit" disabled={isLoading} className="btn-primary w-full justify-center">
+              <button type="submit" disabled={isLoading} className="btn-primary w-full justify-center transition hover:-translate-y-0.5 hover:shadow-lg">
                 {isLoading ? 'Creating account...' : 'Create account'}
               </button>
             </div>
@@ -248,3 +321,6 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+// Напълно изключваме SSR за регистрацията
+export default dynamic(() => Promise.resolve(RegisterInner), { ssr: false });

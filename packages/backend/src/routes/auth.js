@@ -43,12 +43,55 @@ function calcAgeFromDOB(birthDateStr) {
   return age;
 }
 
+// Record user legal consents
+async function recordUserConsents(userId, consents, req) {
+  const required = ['TERMS','PRIVACY','AGE','REFERRAL','COOKIES','REFUND'];
+  for (const key of required) {
+    if (!consents?.[key]) {
+      const err = new Error(`Липсва съгласие за ${key}`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  const active = await prisma.legalDocument.findMany({
+    where: { isActive: true },
+    orderBy: [{ type: 'asc' }, { effectiveAt: 'desc' }],
+  });
+  const latestByType = active.reduce((acc, d) => (acc[d.type] ??= d, acc), {});
+  for (const key of required) {
+    const doc = latestByType[key];
+    if (!doc) {
+      const err = new Error(`Няма активен документ за ${key}`);
+      err.status = 500;
+      throw err;
+    }
+    if (doc.version !== consents[key]) {
+      const err = new Error(`Некоректна версия за ${key}`);
+      err.status = 400;
+      throw err;
+    }
+    await prisma.userAgreement.create({
+      data: {
+        userId,
+        documentId: doc.id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] || null,
+      },
+    });
+  }
+}
+
 // POST /api/auth/register
 router.post(
   '/register',
   [
     body('email').isEmail().normalizeEmail(),
     body('password').isLength({ min: 6 }),
+
+    // LEGAL: изискваме приемане и версии
+    body('ageConfirmed').isBoolean().custom(v => v === true),
+    body('consents').isObject(),
+
     body('referralCode').isString().notEmpty().withMessage('Referral code is required'),
 
     body('firstName').isString().isLength({ min: 2 }),
@@ -91,6 +134,10 @@ router.post(
         state,
         postalCode,
         country,
+
+        // NEW: бяха липсващи — без тях consents щеше да е undefined
+        ageConfirmed,
+        consents,
       } = req.body;
 
       // derive and enforce min age BEFORE Stripe
@@ -98,10 +145,10 @@ router.post(
       if (derivedAge == null) {
         return res.status(400).json({ success: false, message: 'Invalid birth date' });
       }
-      if (derivedAge < 18) {
+      if (!ageConfirmed || derivedAge < 18) {
         return res.status(400).json({
           success: false,
-          message: 'You must be at least 18 years old to register for payouts.',
+          message: 'You must be at least 18 years old and confirm age to register.',
         });
       }
 
@@ -140,6 +187,9 @@ router.post(
           stripeAccountId: true, stripeOnboardingComplete: true, stripePayoutsEnabled: true, stripeChargesEnabled: true,
         },
       });
+
+      // Record legal consents (throws 4xx/5xx with status)
+      await recordUserConsents(user.id, consents, req);
 
       await prisma.referral.create({
         data: { referrerId: referrer.id, referredUserId: user.id, commissionRate: 0.1 },
@@ -224,7 +274,7 @@ router.post(
       });
     } catch (error) {
       console.error('Registration error:', error);
-      return res.status(500).json({ success: false, message: 'Internal server error' });
+      return res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   }
 );
