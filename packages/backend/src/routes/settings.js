@@ -5,7 +5,6 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Нормализация на държава (подобно на auth.js)
 const COUNTRY_NAME_TO_ISO2 = {
   bulgaria: 'BG',
   romania: 'RO',
@@ -29,7 +28,7 @@ function normalizeCountry(value) {
 const sanitizeStr = (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
 
-// GET /api/settings – профил + preferences за текущия user
+// GET /api/settings
 router.get('/', authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
@@ -51,7 +50,37 @@ router.get('/', authenticate, async (req, res) => {
         subscription: { select: { plan: true, status: true, endDate: true } },
       },
     });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (!user) {
+      // UX-first default response instead of 404
+      return res.json({
+        success: true,
+        data: {
+          email: '',
+          firstName: null,
+          lastName: null,
+          birthDate: null,
+          age: null,
+          addressLine1: null,
+          addressLine2: null,
+          city: null,
+          state: null,
+          postalCode: null,
+          country: null,
+          preferences: {
+            oddsFormat: 'decimal',
+            theme: 'light',
+            notifications: { email: true, push: false, dailySummary: false, marketing: false },
+            favoriteSports: [],
+            currency: 'EUR',
+            publicProfile: false,
+            showReferralPublic: false,
+          },
+          subscription: null,
+        },
+      });
+    }
+
     res.json({ success: true, data: user });
   } catch (e) {
     console.error('GET /settings error:', e);
@@ -59,12 +88,11 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// PATCH /api/settings – частични ъпдейти + безопасно merge на preferences
+// PATCH /api/settings (unchanged behavior)
 router.patch(
   '/',
   authenticate,
   [
-    // Важно: checkFalsy позволява "" да се игнорира при optional
     body('firstName').optional({ checkFalsy: true }).isString().isLength({ min: 1, max: 100 }),
     body('lastName').optional({ checkFalsy: true }).isString().isLength({ min: 1, max: 100 }),
     body('birthDate').optional({ checkFalsy: true }).isISO8601(),
@@ -73,9 +101,7 @@ router.patch(
     body('city').optional({ checkFalsy: true }).isString().isLength({ max: 100 }),
     body('state').optional({ checkFalsy: true }).isString().isLength({ max: 100 }),
     body('postalCode').optional({ checkFalsy: true }).isString().isLength({ max: 20 }),
-    // приемаме и имена (Bulgaria), ще нормализираме
     body('country').optional({ checkFalsy: true }).isString().isLength({ min: 2 }),
-
     body('preferences').optional().isObject(),
     body('preferences.oddsFormat').optional({ checkFalsy: true }).isIn(['decimal', 'fractional', 'american']),
     body('preferences.defaultStake').optional({ checkFalsy: true }).isFloat({ min: 0 }),
@@ -85,7 +111,7 @@ router.patch(
     body('preferences.notifications.push').optional().isBoolean(),
     body('preferences.notifications.dailySummary').optional().isBoolean(),
     body('preferences.notifications.marketing').optional().isBoolean(),
-     body('preferences.theme').optional({ checkFalsy: true }).isIn([ 'light', 'dark']),
+    body('preferences.theme').optional({ checkFalsy: true }).isIn(['light', 'dark']),
     body('preferences.language').optional({ checkFalsy: true }).isString().isLength({ min: 2, max: 5 }),
     body('preferences.timeZone').optional({ checkFalsy: true }).isString(),
     body('preferences.currency').optional({ checkFalsy: true }).isIn(['EUR', 'USD', 'BGN']),
@@ -106,7 +132,6 @@ router.patch(
         preferences,
       } = req.body;
 
-      // Санитизация на празни низове
       firstName = sanitizeStr(firstName);
       lastName = sanitizeStr(lastName);
       addressLine1 = sanitizeStr(addressLine1);
@@ -116,7 +141,6 @@ router.patch(
       postalCode = sanitizeStr(postalCode);
       country = sanitizeStr(country);
 
-      // Нормализираме държавата (BG/US/...)
       if (country) {
         const norm = normalizeCountry(country);
         country = norm || undefined;
@@ -128,7 +152,6 @@ router.patch(
       });
       if (!current) return res.status(404).json({ success: false, message: 'User not found' });
 
-      // derive age ако birthDate е подаден
       let derivedAge = undefined;
       if (birthDate) {
         const d = new Date(birthDate);
@@ -143,10 +166,9 @@ router.patch(
         }
       }
 
-      // Почистване на preferences от невалидни стойности (NaN, празни)
       if (preferences && typeof preferences === 'object') {
         const p = { ...preferences };
-        if ('defaultStake' in p && !isFiniteNum(p.defaultStake)) delete p.defaultStake;
+        if ('defaultStake' in p && !(typeof p.defaultStake === 'number' && Number.isFinite(p.defaultStake))) delete p.defaultStake;
         if ('favoriteSports' in p && Array.isArray(p.favoriteSports)) {
           p.favoriteSports = p.favoriteSports.filter((s) => typeof s === 'string' && s.trim() !== '');
           if (p.favoriteSports.length === 0) delete p.favoriteSports;
