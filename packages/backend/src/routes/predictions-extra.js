@@ -68,6 +68,7 @@ router.get('/to-settle', authenticate, requireAdmin, async (req, res) => {
       matchDate: { lt: now },
       result: 'PENDING',
       settledAt: null,
+      status: { not: 'LIVE' }, // НЕ показваме LIVE за уреждане
       ...(sport ? { sport: String(sport) } : {}),
     };
 
@@ -102,7 +103,7 @@ router.get('/to-settle', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/predictions/:id/settle (съществуващ)
+// POST /api/predictions/:id/settle
 router.post('/:id/settle', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -115,6 +116,22 @@ router.post('/:id/settle', authenticate, requireAdmin, async (req, res) => {
     const prediction = await prisma.prediction.findUnique({ where: { id } });
     if (!prediction) {
       return res.status(404).json({ success: false, message: 'Prediction not found' });
+    }
+
+    // Забрана: не може да се урежда докато е LIVE
+    if (prediction.status === 'LIVE') {
+      return res.status(400).json({ success: false, message: 'Cannot settle a LIVE prediction' });
+    }
+
+    // Доп. защита: не може преди началото на мача
+    const now = new Date();
+    if (prediction.matchDate > now) {
+      return res.status(400).json({ success: false, message: 'Cannot settle before the match starts' });
+    }
+
+    // Ако вече е уредена — блокирай
+    if (prediction.settledAt || (prediction.result && prediction.result !== 'PENDING')) {
+      return res.status(400).json({ success: false, message: 'Prediction already settled' });
     }
 
     const updated = await prisma.prediction.update({

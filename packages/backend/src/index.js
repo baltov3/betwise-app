@@ -16,12 +16,14 @@ import stripeWebhookRoutes from './routes/stripe-webhook.js';
 import predictionsExtraRoutes from './routes/predictions-extra.js';
 import statsRoutes from './routes/stats.js';
 import legalRoutes from './routes/legal.js'; 
-import settingsRoutes from './routes/settings.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// ВАЖНО: Stripe webhook ПРЕДИ body parsing (express.json)
+app.use('/api/stripe', stripeWebhookRoutes);
 
 // Security middleware
 app.use(helmet());
@@ -30,20 +32,17 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting
+// Rate limiting (по-късно ще настроим Redis store)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
 });
 app.use(limiter);
 
 // Logging
 app.use(morgan('combined'));
 
-// Stripe webhook (before body parsing)
-app.use('/api/stripe', stripeWebhookRoutes);
-
-// Body parsing
+// Body parsing СЛЕД webhook-а
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -62,8 +61,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/predictions', predictionsExtraRoutes); 
 app.use('/api/stats', statsRoutes);
 app.use('/api/legal', legalRoutes);
-app.use('/api/settings', settingsRoutes);
-
 app.use('/api/payouts', payoutsRoutes);
 
 // Error handling middleware
