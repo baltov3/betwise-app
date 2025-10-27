@@ -1,11 +1,11 @@
 import express from 'express';
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../backend/prisma/db/prisma.js';
 import { authenticate } from '../middleware/auth.js'; // <-- ТУК!
 
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const SUBSCRIPTION_PLANS = {

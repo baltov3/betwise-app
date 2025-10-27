@@ -1,10 +1,9 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../backend/prisma/db/prisma.js';
 import { body, validationResult } from 'express-validator';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Нормализация на държава (подобно на auth.js)
 const COUNTRY_NAME_TO_ISO2 = {

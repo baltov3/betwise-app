@@ -1,6 +1,6 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import prisma from '../../../backend/prisma/db/prisma.js';
+
 const router = Router()
 
 // GET /api/legal-documents — връща най-новата активна версия за всеки тип

@@ -1,9 +1,9 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../backend/prisma/db/prisma.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
 
 // GET /api/predictions/results?days=90&sport=<optional>  (съществуващ)
 router.get('/results', async (req, res) => {

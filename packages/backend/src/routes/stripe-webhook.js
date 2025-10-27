@@ -1,9 +1,8 @@
 import express from 'express';
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../backend/prisma/db/prisma.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // IMPORTANT: Stripe webhooks need raw body

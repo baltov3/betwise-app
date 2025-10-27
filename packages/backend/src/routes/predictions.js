@@ -1,10 +1,9 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../backend/prisma/db/prisma.js';
 import { body, validationResult } from 'express-validator';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
-const prisma = new PrismaClient(); // <-- важно: да не е коментиран
 
 // Конфигурация на live прозорци по спорт (в минути)
 const SPORT_LIVE_DURATION_MIN = {

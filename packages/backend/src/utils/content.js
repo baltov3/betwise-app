@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import prisma from '../../../backend/prisma/db/prisma.js';
 
 /**
  * Валидира consents обект срещу активните версии и записва UserAgreement записи.
