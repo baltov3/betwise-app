@@ -7,6 +7,16 @@ export const api = axios.create({
   },
 });
 
+// NEW: attach token from localStorage to every request
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+
 // Add response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,

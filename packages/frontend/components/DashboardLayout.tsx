@@ -12,15 +12,17 @@ import {
   Bars3Icon,
   XMarkIcon,
   ChartPieIcon,
+  Cog6ToothIcon, 
 } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-     { name: 'Stats', href: '/dashboard/stats', icon: ChartPieIcon }, // NEW: Stats in sidebar nav
+     { name: 'Stats', href: '/dashboard/stats', icon: ChartPieIcon }, 
   { name: 'Predictions', href: '/dashboard/predictions', icon: ChartBarIcon },
   { name: 'Subscription', href: '/dashboard/subscription', icon: CreditCardIcon },
   { name: 'Referrals', href: '/dashboard/referrals', icon: UsersIcon },
   { name: 'Payouts', href: '/dashboard/payouts', icon: CreditCardIcon },
+   { name: 'Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
 
 
 ];

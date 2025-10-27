@@ -71,6 +71,10 @@ model User {
   stripeChargesEnabled     Boolean  @default(false)
   stripeRequirementsDue    Json?
 
+    // NEW: user settings/preferences
+  preferences   Json?
+
+
   // Relations
   subscription  Subscription?
   referrals     Referral[]    @relation("Referrer")
