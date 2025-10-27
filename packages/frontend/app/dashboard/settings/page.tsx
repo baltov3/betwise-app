@@ -6,13 +6,14 @@ import toast from 'react-hot-toast';
 import DashboardLayout from '../../../components/DashboardLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { api } from '../../../lib/api';
+import { applyTheme, initTheme, getStoredTheme, setTheme, normalizeTheme, type ThemeChoice } from '../../../lib/theme';
 
 type Preferences = {
   oddsFormat?: 'decimal' | 'fractional' | 'american';
   defaultStake?: number;
   favoriteSports?: string[];
   notifications?: { email?: boolean; push?: boolean; dailySummary?: boolean; marketing?: boolean };
-  theme?: 'system' | 'light' | 'dark';
+  theme?: ThemeChoice; // само 'light' | 'dark'
   language?: string;
   timeZone?: string;
   currency?: 'EUR' | 'USD' | 'BGN';
@@ -32,25 +33,8 @@ type SettingsDTO = {
   state?: string;
   postalCode?: string;
   country?: string;
-  preferences?: Preferences;
-  subscription?: { plan: string; status: string; endDate?: string | null };
-  stripeOnboardingComplete?: boolean;
-  stripePayoutsEnabled?: boolean;
-  stripeChargesEnabled?: boolean;
+  preferences: Preferences;
 };
-
-function getSystemTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-function applyTheme(theme: 'system' | 'light' | 'dark') {
-  if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  const effective = theme === 'system' ? getSystemTheme() : theme;
-  if (effective === 'dark') root.classList.add('dark');
-  else root.classList.remove('dark');
-  try { localStorage.setItem('theme', theme); } catch {}
-}
 
 export default function SettingsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -60,7 +44,7 @@ export default function SettingsPage() {
     defaultValues: {
       preferences: {
         oddsFormat: 'decimal',
-        theme: 'system',
+        theme: 'light', // по подразбиране имаме само light/dark
         notifications: { email: true, push: false, dailySummary: false, marketing: false },
         favoriteSports: [],
         currency: 'EUR',
@@ -68,7 +52,7 @@ export default function SettingsPage() {
     },
   });
 
-  // 1) Зареждане на данните от бекенда и попълване на формата
+  // 1) Зареждане от бекенда
   useEffect(() => {
     if (authLoading || !user) return;
     (async () => {
@@ -77,32 +61,23 @@ export default function SettingsPage() {
         const res = await api.get('/settings');
         const data = res.data?.data as SettingsDTO;
 
-        // Нормализиране на birthDate (input type="date" изисква YYYY-MM-DD)
-        const mapped: SettingsDTO = {
-          ...data,
-          birthDate: data?.birthDate ? data.birthDate.slice(0, 10) : undefined,
-          preferences: {
-            oddsFormat: data?.preferences?.oddsFormat ?? 'decimal',
-            theme: data?.preferences?.theme ?? 'system',
-            notifications: {
-              email: data?.preferences?.notifications?.email ?? true,
-              push: data?.preferences?.notifications?.push ?? false,
-              dailySummary: data?.preferences?.notifications?.dailySummary ?? false,
-              marketing: data?.preferences?.notifications?.marketing ?? false,
-            },
-            favoriteSports: data?.preferences?.favoriteSports ?? [],
-            currency: data?.preferences?.currency ?? 'EUR',
-            language: data?.preferences?.language ?? undefined,
-            timeZone: data?.preferences?.timeZone ?? undefined,
-            publicProfile: data?.preferences?.publicProfile ?? false,
-            showReferralPublic: data?.preferences?.showReferralPublic ?? false,
-          },
-        };
-        reset(mapped);
+        // Нормализираме birthDate за input type="date"
+        if (data?.birthDate) {
+          const d = new Date(data.birthDate);
+          if (!Number.isNaN(d.getTime())) {
+            const yyyy = d.getUTCFullYear();
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            data.birthDate = `${yyyy}-${mm}-${dd}`;
+          }
+        }
 
-        // Прилагане на тема от бекенда
-        const t = mapped?.preferences?.theme as 'system' | 'light' | 'dark' | undefined;
-        if (t) applyTheme(t);
+        // Нормализираме тема от бекенда (възможно е legacy: 'system'/'darker')
+        const normalizedTheme = normalizeTheme(data?.preferences?.theme);
+        data.preferences.theme = normalizedTheme;
+
+        reset(data);
+        applyTheme(normalizedTheme);
       } catch (e: any) {
         toast.error(e?.response?.data?.message || 'Failed to load settings');
       } finally {
@@ -111,24 +86,23 @@ export default function SettingsPage() {
     })();
   }, [authLoading, user, reset]);
 
-  // 2) Прилагаме локално запазената тема веднага (преди API да върне)
+  // 2) Инициализация от localStorage, минимизираме FOUC
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('theme');
-      if (saved === 'light' || saved === 'dark' || saved === 'system') {
-        applyTheme(saved as any);
-        setValue('preferences.theme', saved as any, { shouldDirty: false, shouldValidate: false });
-      }
+      initTheme();
+      const saved = getStoredTheme();
+      setValue('preferences.theme', saved, { shouldDirty: false, shouldValidate: false });
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3) Автосинк на тема при промяна
+  // 3) Автосинк тема при промяна
   const currentTheme = watch('preferences.theme');
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    const t = (currentTheme || 'system') as 'system' | 'light' | 'dark';
-    applyTheme(t);
+    const t = normalizeTheme(currentTheme);
+    setTheme(t); // локално + applyTheme
+
     if (user) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
@@ -157,9 +131,10 @@ export default function SettingsPage() {
         city: data.city?.trim() || undefined,
         state: data.state?.trim() || undefined,
         postalCode: data.postalCode?.trim() || undefined,
-        country: data.country?.trim() || undefined, // Може "BG" или "Bulgaria" – бекендът нормализира
+        country: data.country?.trim() || undefined,
         preferences: {
           ...data.preferences,
+          theme: normalizeTheme(data.preferences?.theme),
           defaultStake,
           favoriteSports: (data.preferences?.favoriteSports || []).filter((s) => s && s.trim()),
         },
@@ -197,6 +172,28 @@ export default function SettingsPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
           <fieldset disabled={disabled} className={disabled ? 'opacity-60 pointer-events-none' : ''}>
+            {/* Appearance – само две опции */}
+            <section className="space-y-4">
+              <h2 className="text-lg font-medium">Appearance</h2>
+              <div role="radiogroup" aria-label="Theme" className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="card flex items-center gap-3">
+                  <input type="radio" value="light" {...register('preferences.theme')} />
+                  <div>
+                    <div>Light</div>
+                    <div className="text-sm text-foreground/70">Светла тема</div>
+                  </div>
+                </label>
+                <label className="card flex items-center gap-3">
+                  <input type="radio" value="dark" {...register('preferences.theme')} />
+                  <div>
+                    <div>Dark</div>
+                    <div className="text-sm text-foreground/70">Истинско тъмна (AMOLED)</div>
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            {/* Профил */}
             <section className="space-y-4">
               <h2 className="text-lg font-medium">Профил</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -213,6 +210,7 @@ export default function SettingsPage() {
               </div>
             </section>
 
+            {/* Предпочитания за залози */}
             <section className="space-y-4">
               <h2 className="text-lg font-medium">Предпочитания за залози</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -242,6 +240,7 @@ export default function SettingsPage() {
               </div>
             </section>
 
+            {/* Известия */}
             <section className="space-y-4">
               <h2 className="text-lg font-medium">Известия</h2>
               <label className="flex gap-2 items-center">
@@ -254,20 +253,14 @@ export default function SettingsPage() {
                 <input type="checkbox" {...register('preferences.notifications.dailySummary')} /> Daily summary
               </label>
               <label className="flex gap-2 items-center">
-                <input type="checkbox" {...register('preferences.notifications.marketing')} /> Marketing emails
+                <input type="checkbox" {...register('preferences.notifications.marketing')} /> Marketing
               </label>
             </section>
 
+            {/* Валута */}
             <section className="space-y-4">
-              <h2 className="text-lg font-medium">Визия и локализация</h2>
+              <h2 className="text-lg font-medium">Валута</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select className="input" {...register('preferences.theme')}>
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-                <input className="input" placeholder="Language (e.g. bg, en)" {...register('preferences.language')} />
-                <input className="input" placeholder="Time zone (e.g. Europe/Sofia)" {...register('preferences.timeZone')} />
                 <select className="input" {...register('preferences.currency')}>
                   <option value="EUR">EUR</option>
                   <option value="USD">USD</option>
@@ -276,6 +269,7 @@ export default function SettingsPage() {
               </div>
             </section>
 
+            {/* Поверителност */}
             <section className="space-y-4">
               <h2 className="text-lg font-medium">Поверителност</h2>
               <label className="flex gap-2 items-center">
@@ -287,7 +281,7 @@ export default function SettingsPage() {
             </section>
 
             <div>
-              <button className="btn btn-primary" type="submit" disabled={disabled}>Запази</button>
+              <button className="btn btn-primary" type="submit" disabled={loadingSettings}>Запази</button>
             </div>
           </fieldset>
         </form>

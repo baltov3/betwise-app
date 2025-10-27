@@ -4,7 +4,23 @@ import { body, validationResult } from 'express-validator';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = new PrismaClient(); // <-- важно: да не е коментиран
+
+// Конфигурация на live прозорци по спорт (в минути)
+const SPORT_LIVE_DURATION_MIN = {
+  Football: 105,
+  Soccer: 105,
+  Basketball: 150,
+  Tennis: 180,
+  Baseball: 240,
+  // по подразбиране, ако спортът не е изброен
+  __default: 120,
+};
+
+function getLiveDurationMs(sport) {
+  const min = SPORT_LIVE_DURATION_MIN[sport] ?? SPORT_LIVE_DURATION_MIN.__default;
+  return min * 60 * 1000;
+}
 
 // Get all predictions (public)
 router.get('/', async (req, res) => {
@@ -176,8 +192,7 @@ router.put('/:id', authenticate, requireAdmin, [
   }
 });
 
-// ...
-// NEW: Active predictions
+// Обновен: Active predictions включва SCHEDULED + LIVE
 // GET /api/predictions/active?page=1&limit=10&sport=Football
 router.get('/active', async (req, res) => {
   try {
@@ -186,17 +201,32 @@ router.get('/active', async (req, res) => {
     const limitN = parseInt(String(limit), 10);
     const skip = (pageN - 1) * limitN;
     const now = new Date();
+    const nowMs = now.getTime();
 
+    // Ако е зададен sport -> точен live прозорец; иначе използваме по-широк прозорец, за да обхванем потенциални LIVE
+    const durationMs = getLiveDurationMs(sport || '__default');
+    const pastWindowStart = new Date(nowMs - durationMs);
+
+    // Вземаме:
+    // - бъдещи (SCHEDULED) => matchDate >= now
+    // - и започнали в рамките на live прозореца => matchDate в [pastWindowStart, now)
+    // - само неуредени
     const where = {
-      matchDate: { gte: now },
+      OR: [
+        { matchDate: { gte: now } },
+        { matchDate: { gte: pastWindowStart, lt: now } },
+      ],
+      result: 'PENDING',
+      settledAt: null,
       ...(sport ? { sport } : {}),
     };
 
-    const [predictions, total] = await Promise.all([
+    const [rawPredictions, total] = await Promise.all([
       prisma.prediction.findMany({
         where,
         skip,
         take: limitN,
+        // Първо сортираме приблизително по matchDate, а после ще редим LIVE най-отгоре
         orderBy: { matchDate: 'asc' },
         include: {
           creator: { select: { email: true } },
@@ -205,14 +235,40 @@ router.get('/active', async (req, res) => {
       prisma.prediction.count({ where }),
     ]);
 
+    // Изчисляваме статуса и liveUntil и филтрираме мачовете, които вече са извън live прозореца
+    const enriched = rawPredictions
+      .map((p) => {
+        const startMs = new Date(p.matchDate).getTime();
+        const liveUntilMs = startMs + getLiveDurationMs(p.sport);
+        const statusComputed =
+          nowMs < startMs ? 'SCHEDULED' :
+          nowMs <= liveUntilMs ? 'LIVE' :
+          'FINISHED';
+
+        return {
+          ...p,
+          statusComputed,
+          liveUntil: new Date(liveUntilMs).toISOString(),
+        };
+      })
+      // Премахваме "преминалите" от активния списък
+      .filter((p) => p.statusComputed === 'SCHEDULED' || p.statusComputed === 'LIVE');
+
+    // LIVE нагоре, после по време
+    enriched.sort((a, b) => {
+      if (a.statusComputed === 'LIVE' && b.statusComputed !== 'LIVE') return -1;
+      if (a.statusComputed !== 'LIVE' && b.statusComputed === 'LIVE') return 1;
+      return new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime();
+    });
+
     res.json({
       success: true,
       data: {
-        predictions,
+        predictions: enriched,
         pagination: {
           page: pageN,
           limit: limitN,
-          total,
+          total, // заб.: total е приблизително спрямо where; списъкът е обогатен и филтриран
           pages: Math.ceil(total / limitN) || 1,
         },
       },
@@ -222,7 +278,6 @@ router.get('/active', async (req, res) => {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
-
 
 // Delete prediction (admin only)
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {

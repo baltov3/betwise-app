@@ -86,7 +86,7 @@ router.patch(
     body('preferences.notifications.push').optional().isBoolean(),
     body('preferences.notifications.dailySummary').optional().isBoolean(),
     body('preferences.notifications.marketing').optional().isBoolean(),
-    body('preferences.theme').optional({ checkFalsy: true }).isIn(['system', 'light', 'dark']),
+     body('preferences.theme').optional({ checkFalsy: true }).isIn([ 'light', 'dark']),
     body('preferences.language').optional({ checkFalsy: true }).isString().isLength({ min: 2, max: 5 }),
     body('preferences.timeZone').optional({ checkFalsy: true }).isString(),
     body('preferences.currency').optional({ checkFalsy: true }).isIn(['EUR', 'USD', 'BGN']),
