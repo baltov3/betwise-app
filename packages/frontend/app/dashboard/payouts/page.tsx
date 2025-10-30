@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import DashboardLayout from '../../../components/DashboardLayout';
+import UpsellModal from '../../../components/UpsellModal';
 import { api } from '../../../lib/api';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -15,15 +16,26 @@ interface RequestItem {
   createdAt: string;
 }
 
+interface Subscription {
+  status: string;
+  endDate?: string;
+}
+
 export default function UserPayoutsPage() {
   const { user, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<any>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
 
-  // НОВО: състояние за форма
+  const [showUpsell, setShowUpsell] = useState(false);
+
+  // Форма
   const [amountInput, setAmountInput] = useState<string>('');
   const MIN_PAYOUT = 20;
+
+  const isSubActive = (sub: Subscription | null) =>
+    Boolean(sub && sub.status === 'ACTIVE' && sub.endDate && new Date(sub.endDate) > new Date());
 
   const available = useMemo(() => Number(status?.balance?.available || 0), [status]);
   const parsedAmount = useMemo(() => {
@@ -31,14 +43,23 @@ export default function UserPayoutsPage() {
     return Number.isFinite(n) ? n : NaN;
   }, [amountInput]);
 
+  const hasStripe = Boolean(status?.stripePayoutsEnabled);
+  const subActive = isSubActive(subscription);
+  const meetsMin = available >= MIN_PAYOUT;
+  const payoutsEligible = subActive && hasStripe && meetsMin;
+
   const load = async () => {
     try {
-      const [reqs, stat] = await Promise.all([
+      const [reqs, stat, subRes] = await Promise.all([
         api.get('/payouts/my-requests'),
         api.get('/payouts/status'),
+        api.get('/subscriptions/status').catch(
+          () => ({ data: { data: { subscription: null } } }) as any
+        ),
       ]);
       setRequests(reqs.data.data.requests);
       setStatus(stat.data.data);
+      setSubscription(subRes.data?.data?.subscription || null);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Failed to load data');
     } finally {
@@ -46,11 +67,12 @@ export default function UserPayoutsPage() {
     }
   };
 
-  useEffect(() => { if (!authLoading && user) load(); }, [authLoading, user]);
+  useEffect(() => {
+    if (!authLoading && user) load();
+  }, [authLoading, user]);
 
   const setQuick = (val: number) => {
-    const max = Math.max(MIN_PAYOUT, available);
-    const v = Math.min(max, Math.max(MIN_PAYOUT, Number(val)));
+    const v = Math.min(available, Math.max(MIN_PAYOUT, Number(val)));
     setAmountInput(v.toFixed(2));
   };
 
@@ -60,11 +82,15 @@ export default function UserPayoutsPage() {
   };
 
   const requestPayout = async () => {
-    if (!status?.stripePayoutsEnabled) {
+    if (!subActive) {
+      setShowUpsell(true);
+      return;
+    }
+    if (!hasStripe) {
       toast.error('Завърши Stripe онбординга, за да заявиш теглене.');
       return;
     }
-    if (!(available >= MIN_PAYOUT)) {
+    if (!meetsMin) {
       toast.error(`Минималната сума за теглене е $${MIN_PAYOUT}.`);
       return;
     }
@@ -107,160 +133,373 @@ export default function UserPayoutsPage() {
     );
   }
 
-  const disableSubmit =
-    !status?.stripePayoutsEnabled ||
-    !(available >= MIN_PAYOUT) ||
+  // Визуално „disabled“ (кликаемо за Upsell)
+  const visuallyDisabled =
+    !subActive ||
+    !hasStripe ||
+    !meetsMin ||
     !Number.isFinite(parsedAmount) ||
     parsedAmount < MIN_PAYOUT ||
     parsedAmount > available;
 
+  // Chip helpers
+  const chip = (color: 'green' | 'red' | 'blue' | 'amber', text: string) => {
+    const colors: Record<string, string> = {
+      green: 'bg-green-50 text-green-700 ring-1 ring-green-200',
+      red: 'bg-red-50 text-red-700 ring-1 ring-red-200',
+      blue: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200',
+      amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+    };
+    return (
+      <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ${colors[color]}`}>
+        <span
+          className={`h-2 w-2 rounded-full ${
+            color === 'green'
+              ? 'bg-green-500'
+              : color === 'red'
+              ? 'bg-red-500'
+              : color === 'blue'
+              ? 'bg-blue-500'
+              : 'bg-amber-500'
+          }`}
+        />
+        {text}
+      </span>
+    );
+  };
+
   return (
     <DashboardLayout>
+      <UpsellModal
+        open={showUpsell}
+        onClose={() => setShowUpsell(false)}
+        title="Тегленето е налично за активни абонати"
+        bullets={[
+          'Отключи теглене на натрупаните средства',
+          'По-високи комисиони с Premium/VIP планове',
+          'Приоритетна поддръжка',
+        ]}
+        ctaHref="/pricing"
+        ctaText="Виж плановете"
+        secondaryCtaHref="/dashboard/subscription"
+        secondaryCtaText="Управление на абонамент"
+      />
+
       <div className="p-4 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Payouts</h1>
-          <p className="text-gray-600">Заяви теглене на рефъръл печалбите си.</p>
+        {/* Хедър с независими лейбъли (Subscription / Stripe / Withdrawals) */}
+        <div className="relative overflow-hidden rounded-2xl border border-primary-200/40 bg-gradient-to-r from-primary-50 via-white to-indigo-50 p-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Payouts</h1>
+              <p className="text-sm text-gray-600">
+                Управлявай заявките за теглене и следи баланса си от реферали.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Абонамент: зависи само от абонамента */}
+              {chip(subActive ? 'green' : 'red', subActive ? 'Subscription: Active' : 'Subscription: Inactive')}
+
+              {/* Stripe: зависи само от Stripe състоянието (независим от абонамента) */}
+              {chip(hasStripe ? 'green' : 'red', hasStripe ? 'Stripe статус: Payouts enabled' : 'Stripe статус: Not enabled')}
+
+              {/* Withdrawals Eligibility: комбинираното състояние */}
+              {chip(payoutsEligible ? 'green' : 'red', payoutsEligible ? 'Withdrawals: Eligible' : 'Withdrawals: Locked')}
+            </div>
+          </div>
+
+          {/* Обяснение защо е заключено */}
+          {!payoutsEligible && (
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 text-sm text-gray-700 backdrop-blur">
+              <div className="font-semibold text-gray-900 mb-1">Защо тегленето е недостъпно:</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {!subActive && <li>Нямаш активен абонамент.</li>}
+                {subActive && !hasStripe && <li>Stripe payouts не са активирани. Завърши онбординга в Stripe.</li>}
+                {subActive && hasStripe && !meetsMin && (
+                  <li>
+                    Нямаш минимална наличност. Минимум: ${MIN_PAYOUT}. Текущо: ${available.toFixed(2)}.
+                  </li>
+                )}
+              </ul>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {!subActive && (
+                  <>
+                    <Link
+                      href="/pricing"
+                      className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-primary-500"
+                    >
+                      Виж плановете
+                    </Link>
+                    <Link
+                      href="/dashboard/subscription"
+                      className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50"
+                    >
+                      Управление на абонамент
+                    </Link>
+                  </>
+                )}
+                {subActive && !hasStripe && (
+                  <Link
+                    href="/dashboard/payouts/onboarding"
+                    className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-indigo-500"
+                  >
+                    Завърши Stripe онбординг
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Статус + Баланс */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 border rounded">
-            <div className="mb-2">
-              <strong>Stripe статус:</strong>{' '}
-              {status?.stripePayoutsEnabled ? 'Payouts enabled' : 'Payouts not enabled'}
+        {/* Карти: Subscription / Stripe / Balance */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Subscription */}
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="mb-1 text-sm font-medium text-gray-900">Абонамент</div>
+            <div className="mb-3">
+              {chip(subActive ? 'green' : 'red', subActive ? 'Active' : 'Inactive')}
             </div>
-            {!status?.stripePayoutsEnabled && (
-              <Link href="/dashboard/payouts/onboarding" className="inline-block px-3 py-2 bg-indigo-600 text-white rounded">
-                Завърши Stripe онбординг
-              </Link>
+            {!subActive && (
+              <div className="space-x-2">
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-primary-500"
+                >
+                  Виж плановете
+                </Link>
+                <Link
+                  href="/dashboard/subscription"
+                  className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50"
+                >
+                  Управление
+                </Link>
+              </div>
             )}
           </div>
 
-          <div className="p-4 border rounded">
-            <h2 className="text-lg font-semibold mb-2">Баланс</h2>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2 bg-gray-50 rounded">
-                <div className="text-xs text-gray-500">Натрупани (Earned)</div>
-                <div className="text-lg font-semibold text-gray-800">${Number(status?.balance?.earned || 0).toFixed(2)}</div>
+          {/* Stripe статус — независим от абонамента */}
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="mb-1 text-sm font-medium text-gray-900">Stripe статус</div>
+            <div className="mb-3">
+              {chip(hasStripe ? 'green' : 'red', hasStripe ? 'Payouts enabled' : 'Payouts not enabled')}
+            </div>
+            {!hasStripe && (
+              <Link
+                href="/dashboard/payouts/onboarding"
+                className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500"
+              >
+                Завърши Stripe онбординг
+              </Link>
+            )}
+            {/* Подсказка при активен Stripe, но неактивен абонамент */}
+            {hasStripe && !subActive && (
+              <p className="mt-2 text-xs text-gray-600">
+                Аккаунтът в Stripe е активен, но тегленето е блокирано без активен абонамент.
+              </p>
+            )}
+          </div>
+
+          {/* Баланс */}
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <h2 className="mb-2 text-lg font-semibold text-gray-900">Баланс</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Натрупани</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  ${Number(status?.balance?.earned || 0).toFixed(2)}
+                </div>
               </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <div className="text-xs text-gray-500">Заключени (Processing/Paid)</div>
-                <div className="text-lg font-semibold text-gray-800">${Number(status?.balance?.locked || 0).toFixed(2)}</div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Заключени</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  ${Number(status?.balance?.locked || 0).toFixed(2)}
+                </div>
               </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <div className="text-xs text-gray-500">Чакащи (Requested)</div>
-                <div className="text-lg font-semibold text-gray-800">${Number(status?.balance?.pending || 0).toFixed(2)}</div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Чакащи</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  ${Number(status?.balance?.pending || 0).toFixed(2)}
+                </div>
               </div>
-              <div className="p-2 bg-gray-50 rounded">
-                <div className="text-xs text-gray-500">Налични (Available)</div>
-                <div className="text-lg font-semibold text-green-600">${available.toFixed(2)}</div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">Налични</div>
+                <div className="text-lg font-semibold text-green-600">
+                  ${available.toFixed(2)}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Форма за заявка със сума */}
-        <div className="p-4 border rounded bg-white">
-          <h2 className="text-lg font-semibold mb-3">Заяви теглене</h2>
+        {/* Форма за заявка */}
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">Заяви теглене</h2>
 
           {available < MIN_PAYOUT ? (
             <div className="text-sm text-gray-600">
               Минималната сума за теглене е ${MIN_PAYOUT}. Текущо налични: ${available.toFixed(2)}.
             </div>
           ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                <label className="text-sm text-gray-700">
-                  Сума за теглене ($)
-                  <input
-                    type="number"
-                    min={MIN_PAYOUT}
-                    step="0.01"
-                    placeholder={MIN_PAYOUT.toFixed(2)}
-                    value={amountInput}
-                    onChange={(e) => setAmountInput(e.target.value)}
-                    className="mt-1 w-full border rounded px-3 py-2"
-                  />
-                </label>
+            <div className="flex flex-col gap-4">
+              <label className="text-sm text-gray-700">
+                Сума за теглене ($)
+                <input
+                  type="number"
+                  min={MIN_PAYOUT}
+                  step="0.01"
+                  placeholder={MIN_PAYOUT.toFixed(2)}
+                  value={amountInput}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </label>
 
-                <div>
-                  <input
-                    type="range"
-                    min={MIN_PAYOUT}
-                    max={Math.max(MIN_PAYOUT, Math.floor(available))}
-                    step="1"
-                    value={
-                      Number.isFinite(parsedAmount)
-                        ? Math.min(Math.max(parsedAmount, MIN_PAYOUT), Math.max(MIN_PAYOUT, Math.floor(available)))
-                        : MIN_PAYOUT
-                    }
-                    onChange={onSliderChange}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>${MIN_PAYOUT}</span>
-                    <span>${Math.max(MIN_PAYOUT, Math.floor(available))}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="px-3 py-1 border rounded hover:bg-gray-50" onClick={() => setQuick(MIN_PAYOUT)}>
-                    ${MIN_PAYOUT}
-                  </button>
-                  {available >= 50 && (
-                    <button type="button" className="px-3 py-1 border rounded hover:bg-gray-50" onClick={() => setQuick(50)}>
-                      $50
-                    </button>
-                  )}
-                  {available >= 100 && (
-                    <button type="button" className="px-3 py-1 border rounded hover:bg-gray-50" onClick={() => setQuick(100)}>
-                      $100
-                    </button>
-                  )}
-                  <button type="button" className="px-3 py-1 border rounded hover:bg-gray-50" onClick={() => setQuick(available)}>
-                    Максимум (${available.toFixed(2)})
-                  </button>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    className={`px-4 py-2 rounded text-white ${disableSubmit ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
-                    onClick={requestPayout}
-                    disabled={disableSubmit}
-                  >
-                    Подай заявка
-                  </button>
+              <div>
+                <input
+                  type="range"
+                  min={MIN_PAYOUT}
+                  max={Math.max(MIN_PAYOUT, Math.floor(available))}
+                  step="1"
+                  value={
+                    Number.isFinite(parsedAmount)
+                      ? Math.min(
+                          Math.max(parsedAmount, MIN_PAYOUT),
+                          Math.max(MIN_PAYOUT, Math.floor(available))
+                        )
+                      : MIN_PAYOUT
+                  }
+                  onChange={onSliderChange}
+                  className="w-full accent-primary-600"
+                />
+                <div className="mt-1 flex justify-between text-xs text-gray-500">
+                  <span>${MIN_PAYOUT}</span>
+                  <span>${Math.max(MIN_PAYOUT, Math.floor(available))}</span>
                 </div>
               </div>
-            </>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
+                  onClick={() => setQuick(MIN_PAYOUT)}
+                >
+                  ${MIN_PAYOUT}
+                </button>
+                {available >= 50 && (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
+                    onClick={() => setQuick(50)}
+                  >
+                    $50
+                  </button>
+                )}
+                {available >= 100 && (
+                  <button
+                    type="button"
+                    className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
+                    onClick={() => setQuick(100)}
+                  >
+                    $100
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
+                  onClick={() => setQuick(available)}
+                >
+                  Максимум (${available.toFixed(2)})
+                </button>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  aria-disabled={visuallyDisabled}
+                  title={
+                    !subActive
+                      ? 'Нужен е активен абонамент'
+                      : !hasStripe
+                      ? 'Завърши Stripe онбординга'
+                      : !meetsMin
+                      ? `Минимум $${MIN_PAYOUT}`
+                      : !Number.isFinite(parsedAmount)
+                      ? 'Невалидна сума'
+                      : parsedAmount < MIN_PAYOUT
+                      ? `Минимум $${MIN_PAYOUT}`
+                      : parsedAmount > available
+                      ? `Максимум $${available.toFixed(2)}`
+                      : 'Подай заявка'
+                  }
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition ${
+                    visuallyDisabled
+                      ? 'bg-gray-300 text-gray-600 cursor-pointer'
+                      : 'bg-primary-600 hover:bg-primary-500 shadow'
+                  }`}
+                  onClick={requestPayout}
+                >
+                  Подай заявка
+                </button>
+                {!subActive && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Бутонът е заключен: нужeн е активен абонамент
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         {/* История на заявките */}
-        <div>
-          <h2 className="text-xl font-semibold mb-2">Моите заявки</h2>
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">Моите заявки</h2>
           {loading ? (
             <div>Loading...</div>
           ) : requests.length === 0 ? (
-            <div>Няма заявки.</div>
+            <div className="text-sm text-gray-600">Няма заявки.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border">
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
-                    <th className="p-2 border">Amount</th>
-                    <th className="p-2 border">Currency</th>
-                    <th className="p-2 border">Status</th>
-                    <th className="p-2 border">Created</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium text-gray-700">
+                      Amount
+                    </th>
+                    <th className="sticky top-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium text-gray-700">
+                      Currency
+                    </th>
+                    <th className="sticky top-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium text-gray-700">
+                      Status
+                    </th>
+                    <th className="sticky top-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium text-gray-700">
+                      Created
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r) => (
-                    <tr key={r.id}>
-                      <td className="p-2 border">${r.amount.toFixed(2)}</td>
-                      <td className="p-2 border">{r.currency}</td>
-                      <td className="p-2 border">{r.status}</td>
-                      <td className="p-2 border">{new Date(r.createdAt).toLocaleString()}</td>
+                  {requests.map((r, idx) => (
+                    <tr key={r.id} className={idx % 2 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-50'}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium">${r.amount.toFixed(2)}</span>
+                      </td>
+                      <td className="px-3 py-2">{r.currency}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
+                            r.status === 'REQUESTED'
+                              ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                              : r.status === 'PROCESSING'
+                              ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+                              : r.status === 'PAID'
+                              ? 'bg-green-50 text-green-700 ring-1 ring-green-200'
+                              : r.status === 'FAILED'
+                              ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
+                              : 'bg-gray-50 text-gray-700 ring-1 ring-gray-200'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{new Date(r.createdAt).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

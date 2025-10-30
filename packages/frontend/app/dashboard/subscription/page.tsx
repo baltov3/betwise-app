@@ -143,10 +143,8 @@ export default function SubscriptionPage() {
               return (
                 <div key={key} className={`card ${isCurrentPlan ? 'ring-2 ring-primary-600' : ''}`}>
                   {isCurrentPlan && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm">
-                        Current Plan
-                      </span>
+                    <div className="absolute -top-1  left-1/2 transform -translate-x-1/2">
+                     
                     </div>
                   )}
                   

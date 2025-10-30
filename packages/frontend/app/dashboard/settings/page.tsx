@@ -273,9 +273,17 @@ function StickySaveBar({
   );
 }
 
-function useActiveSection(ids: string[]) {
+// UPDATED: add `enabled` flag so the hook can be called unconditionally
+function useActiveSection(ids: string[], enabled = true) {
   const [active, setActive] = useState<string>(ids[0] || '');
+
   useEffect(() => {
+    if (!enabled || !ids?.length) {
+      // Reset to first or empty when disabled
+      setActive(ids[0] || '');
+      return;
+    }
+
     const observers: IntersectionObserver[] = [];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -292,7 +300,8 @@ function useActiveSection(ids: string[]) {
       observers.push(obs);
     });
     return () => observers.forEach((o) => o.disconnect());
-  }, [ids.join(',')]);
+  }, [enabled, ids.join(',')]);
+
   return active;
 }
 
@@ -313,6 +322,14 @@ export default function SettingsPage() {
       },
     },
   });
+
+  // IMPORTANT: define and call the hook BEFORE any early returns
+  const sectionIds = useMemo(
+    () => ['appearance', 'profile', 'betting', 'notifications', 'currency', 'privacy'],
+    []
+  );
+  const observeEnabled = !authLoading && !!user;
+  const active = useActiveSection(sectionIds, observeEnabled);
 
   // 1) Load from backend (with graceful 404 fallback)
   useEffect(() => {
@@ -449,10 +466,6 @@ export default function SettingsPage() {
   }
 
   const disabled = loadingSettings;
-
-  // Left nav
-  const sectionIds = ['appearance', 'profile', 'betting', 'notifications', 'currency', 'privacy'];
-  const active = useActiveSection(sectionIds);
 
   const handleAnchor = (id: string) => {
     const el = document.getElementById(id);

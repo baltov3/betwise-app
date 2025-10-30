@@ -16,6 +16,7 @@ import stripeWebhookRoutes from './routes/stripe-webhook.js';
 import predictionsExtraRoutes from './routes/predictions-extra.js';
 import statsRoutes from './routes/stats.js';
 import legalRoutes from './routes/legal.js'; 
+import settingsRoutes from './routes/settings.js';
 
 dotenv.config();
 
@@ -62,7 +63,7 @@ app.use('/api/predictions', predictionsExtraRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/legal', legalRoutes);
 app.use('/api/payouts', payoutsRoutes);
-
+app.use('/api/settings', settingsRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
