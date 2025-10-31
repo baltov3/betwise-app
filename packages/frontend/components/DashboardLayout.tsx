@@ -22,6 +22,29 @@ import {
 import ThemeToggle from './ThemeToggle';
 import MobileTabBar from './MobileTabBar';
 import { motion } from 'framer-motion';
+// NEW: subscription renewal notice modal
+import SubscriptionRenewalNotice from './SubscriptionRenewalNotice';
+
+
+// Добави този helper над компонента (след импортите):
+const clearRenewalNoticeForUser = (userId?: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (!k) continue;
+      // чистим само ключовете за напомнянето, и по възможност само за конкретния userId
+      const isRenewalKey = k.startsWith('renewalNoticeShown:');
+      const isForUser = userId ? k.startsWith(`renewalNoticeShown:${userId}:`) : true;
+      if (isRenewalKey && isForUser) keysToRemove.push(k);
+    }
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    // игнорираме грешки
+  }
+};
+
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
@@ -41,6 +64,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
 
   const handleLogout = () => {
+        clearRenewalNoticeForUser(user?.id);
     logout();
     router.push('/');
   };
@@ -52,8 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [user]);
 
   // Най-дълбоко съвпадение за active state
-  const matches = (href: string) =>
-    pathname === href || pathname?.startsWith(href + '/');
+  const matches = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 
   const activeHref = useMemo(() => {
     const candidates = navigation.filter((n) => matches(n.href));
@@ -70,25 +93,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Mobile sidebar */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
-            onClick={() => setSidebarOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" onClick={() => setSidebarOpen(false)} />
           <motion.aside
             initial={{ x: -320, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -320, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-            className="relative h-full w-80 bg-white/85 dark:bg-gray-950/80 backdrop-blur-xl
-                       border-r border-gray-200/70 dark:border-gray-800 shadow-2xl"
+            className="relative h-full w-80 bg-white/85 dark:bg-gray-950/80 backdrop-blur-xl border-r border-gray-200/70 dark:border-gray-800 shadow-2xl"
           >
             <div className="flex items-center justify-between px-5 h-16">
               <Link href="/" className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-emerald-500">
                 Betwise
               </Link>
               <button
-                className="h-9 w-9 inline-flex items-center justify-center rounded-lg
-                           hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close menu"
               >
@@ -144,11 +162,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {collapsed ? (
-                <ChevronDoubleRightIcon className="h-5 w-5" />
-              ) : (
-                <ChevronDoubleLeftIcon className="h-5 w-5" />
-              )}
+              {collapsed ? <ChevronDoubleRightIcon className="h-5 w-5" /> : <ChevronDoubleLeftIcon className="h-5 w-5" />}
             </button>
           </div>
 
@@ -167,9 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 ? 'text-primary-900 dark:text-primary-100 bg-primary-50 dark:bg-primary-900/30'
                                 : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
                 >
-                  {active && (
-                    <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-gradient-to-b from-primary-500 to-fuchsia-500" />
-                  )}
+                  {active && <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-gradient-to-b from-primary-500 to-fuchsia-500" />}
                   <item.icon className="h-5 w-5 shrink-0" />
                   {!collapsed && <span className="text-sm font-semibold truncate">{item.name}</span>}
                 </Link>
@@ -196,8 +208,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main */}
       <div className={`flex-1 min-w-0 ${mainOffset} transition-all duration-200`}>
         {/* Top navigation */}
-        <div className="sticky top-0 z-20 h-16 bg-white/70 dark:bg-gray-950/60 backdrop-blur-xl
-                        border-b border-gray-200/70 dark:border-gray-800 shadow-sm">
+        <div className="sticky top-0 z-20 h-16 bg-white/70 dark:bg-gray-950/60 backdrop-blur-xl border-b border-gray-200/70 dark:border-gray-800 shadow-sm">
           <div className="h-full flex items-center justify-between px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
             <div className="flex items-center gap-2">
               <button
@@ -254,10 +265,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
 
               <div className="relative">
-                <button
-                  className="inline-flex items-center gap-2 h-10 pl-2 pr-2 rounded-lg
-                             hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                >
+                <button className="inline-flex items-center gap-2 h-10 pl-2 pr-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-500 to-emerald-500 text-white grid place-items-center text-xs font-bold">
                     {initials}
                   </div>
@@ -265,9 +273,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </button>
               </div>
 
-              <button onClick={handleLogout} className="hidden sm:inline-flex items-center h-9 px-3 rounded-lg border text-sm font-medium
-                                                         border-gray-200 hover:bg-gray-100
-                                                         dark:border-gray-800 dark:hover:bg-gray-800">
+              <button
+                onClick={handleLogout}
+                className="hidden sm:inline-flex items-center h-9 px-3 rounded-lg border text-sm font-medium
+                           border-gray-200 hover:bg-gray-100
+                           dark:border-gray-800 dark:hover:bg-gray-800"
+              >
                 Logout
               </button>
             </div>
@@ -275,11 +286,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <main className="relative">
+          {/* NEW: глобален модал за напомняне за абонамент */}
+          <SubscriptionRenewalNotice />
           <div className="py-6">
             {/* Пълна ширина: без mx-auto и без max-w-* */}
-            <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
-              {children}
-            </div>
+            <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">{children}</div>
           </div>
         </main>
       </div>
