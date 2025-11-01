@@ -6,6 +6,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { api } from '../../lib/api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../../lib/currency';
 
 interface Prediction {
   id: string;
@@ -28,7 +29,7 @@ interface Subscription {
 interface ReferralStats {
   totalReferrals: number;
   activeReferrals: number;
-  totalEarnings: string;
+  totalEarnings: string; // API връща string – ще кастнем към number за формат
   referralLink: string;
 }
 
@@ -80,6 +81,8 @@ export default function DashboardPage() {
       </DashboardLayout>
     );
   }
+
+  const totalEarningsNumber = parseFloat(referralStats?.totalEarnings ?? '0') || 0;
 
   return (
     <DashboardLayout>
@@ -133,7 +136,7 @@ export default function DashboardPage() {
             <h3 className="text-lg font-medium text-gray-900">Earnings</h3>
             <div className="mt-2">
               <p className="text-2xl font-bold text-green-600">
-                ${referralStats?.totalEarnings || '0.00'}
+                {formatCurrency(totalEarningsNumber)}
               </p>
               <p className="text-sm text-gray-500">Total referral earnings</p>
             </div>

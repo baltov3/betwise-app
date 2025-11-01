@@ -114,7 +114,7 @@ router.patch(
     body('preferences.theme').optional({ checkFalsy: true }).isIn(['light', 'dark']),
     body('preferences.language').optional({ checkFalsy: true }).isString().isLength({ min: 2, max: 5 }),
     body('preferences.timeZone').optional({ checkFalsy: true }).isString(),
-    body('preferences.currency').optional({ checkFalsy: true }).isIn(['EUR', 'USD', 'BGN']),
+    body('preferences.currency').optional({ checkFalsy: true }).isIn(['EUR']),
     body('preferences.publicProfile').optional().isBoolean(),
     body('preferences.showReferralPublic').optional().isBoolean(),
   ],

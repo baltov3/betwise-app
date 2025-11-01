@@ -1,8 +1,9 @@
 {
   "/not-found": "app/not-found.js",
+  "/login/page": "app/login/page.js",
+  "/dashboard/payouts/page": "app/dashboard/payouts/page.js",
+  "/dashboard/settings/page": "app/dashboard/settings/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
   "/dashboard/subscription/page": "app/dashboard/subscription/page.js",
-  "/dashboard/predictions/page": "app/dashboard/predictions/page.js",
-  "/admin/users/page": "app/admin/users/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/admin/predictions/new/page": "app/admin/predictions/new/page.js"
+  "/dashboard/stats/page": "app/dashboard/stats/page.js"
 }

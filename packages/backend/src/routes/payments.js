@@ -2,6 +2,8 @@ import express from 'express';
 import Stripe from 'stripe';
 import prisma from '../../../backend/prisma/db/prisma.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { PLATFORM_CURRENCY } from '../config/currency.js';
+
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -29,7 +31,7 @@ router.post('/payout', authenticate, async (req, res) => {
       data: {
         userId,
         amount: totalEarnings,
-        currency: 'usd',
+        currency: PLATFORM_CURRENCY,
         status: 'REQUESTED',
         reason: req.body?.reason || null,
       }
@@ -118,7 +120,7 @@ async function handleCheckoutCompleted(session) {
     data: {
       userId,
       amount: session.amount_total / 100, // Convert from cents
-      currency: session.currency,
+      currency: PLATFORM_CURRENCY,
       method: 'stripe',
       status: 'COMPLETED',
       stripeId: session.payment_intent,

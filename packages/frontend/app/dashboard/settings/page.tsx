@@ -16,7 +16,7 @@ type Preferences = {
   theme?: ThemeChoice; // 'light' | 'dark'
   language?: string;
   timeZone?: string;
-  currency?: 'EUR' | 'USD' | 'BGN';
+  currency?: 'EUR' ;
   publicProfile?: boolean;
   showReferralPublic?: boolean;
 };
@@ -669,20 +669,19 @@ export default function SettingsPage() {
                   )}
                 </Section>
 
-                {/* Currency */}
-                <Section id="currency" title="Валута" subtitle="Избери предпочитана валута за показване" icon={<span>💱</span>}>
-                  {loadingSettings ? (
-                    <Skeleton className="h-10 w-52" />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <select className="input" {...register('preferences.currency')}>
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                        <option value="BGN">BGN</option>
-                      </select>
-                    </div>
-                  )}
-                </Section>
+ {/* Currency */}
+<Section id="currency" title="Валута" subtitle="Платформата работи само в EUR" icon={<span>💱</span>}>
+  {loadingSettings ? (
+    <Skeleton className="h-10 w-52" />
+  ) : (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <select className="input" {...register('preferences.currency')} disabled>
+        <option value="EUR">EUR</option>
+      </select>
+      <p className="text-xs text-gray-500">Визуализацията и разплащанията са само в евро.</p>
+    </div>
+  )}
+</Section>
 
                 {/* Privacy */}
                 <Section id="privacy" title="Поверителност" subtitle="Контролирай какво е видимо за другите" icon={<span>🔒</span>}>

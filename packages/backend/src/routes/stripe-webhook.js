@@ -1,6 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import prisma from '../../../backend/prisma/db/prisma.js';
+import { PLATFORM_CURRENCY } from '../config/currency.js';
 
 // Създаваме самостоятелен router за Stripe webhook-и.
 // ВАЖНО: Този router трябва да е монтиран ПРЕДИ express.json() в index.js:
@@ -71,7 +72,7 @@ async function handleCheckoutCompleted(session) {
         provider: 'STRIPE',
         status: 'COMPLETED',
         amount: amountTotal || 0,
-        currency: session.currency?.toUpperCase() || 'USD',
+       currency: (session.currency || PLATFORM_CURRENCY).toUpperCase(), // -> 'EUR'
         externalId: String(session.id),
         meta: JSON.stringify({
           type: 'checkout.session.completed',
@@ -109,7 +110,7 @@ async function handleInvoicePaymentSucceeded(invoice) {
       provider: 'STRIPE',
       status: 'COMPLETED',
       amount: amountPaid,
-      currency: (invoice.currency || 'usd').toUpperCase(),
+      currency: (invoice.currency || PLATFORM_CURRENCY).toUpperCase(), // -> 'EUR'
       externalId: String(invoice.id),
       meta: JSON.stringify({
         type: 'invoice.payment_succeeded',

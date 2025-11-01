@@ -163,7 +163,7 @@ model Payment {
   id        String        @id @default(uuid())
   userId    String
   amount    Float
-  currency  String        @default("usd")
+  currency  String        @default("eur")
   method    String
   date      DateTime      @default(now())
   status    PaymentStatus @default(PENDING)
@@ -181,7 +181,7 @@ model PayoutRequest {
   id               String       @id @default(uuid())
   userId           String
   amount           Float
-  currency         String       @default("usd")
+  currency         String       @default("eur")
   status           PayoutStatus @default(REQUESTED)
   reason           String?
   adminNote        String?

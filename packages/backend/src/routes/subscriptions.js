@@ -2,6 +2,7 @@ import express from 'express';
 import Stripe from 'stripe';
 import prisma from '../../../backend/prisma/db/prisma.js';
 import { authenticate } from '../middleware/auth.js'; // <-- ТУК!
+import { PLATFORM_CURRENCY } from '../config/currency.js';  
 
 
 const router = express.Router();
@@ -61,7 +62,7 @@ router.post('/create', authenticate, async (req, res) => {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: PLATFORM_CURRENCY,
             product_data: {
               name: `Betwise ${plan} Plan`,
             },

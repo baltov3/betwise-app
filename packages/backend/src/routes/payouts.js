@@ -2,6 +2,7 @@ import express from 'express';
 import prisma from '../../../backend/prisma/db/prisma.js';
 import Stripe from 'stripe';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { PLATFORM_CURRENCY } from '../config/currency.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
@@ -240,7 +241,7 @@ router.post('/request', authenticate, async (req, res) => {
       data: {
         userId,
         amount: requestedAmount,
-        currency: 'usd',
+        currency: PLATFORM_CURRENCY,
         status: 'REQUESTED',
         reason: req.body?.reason || null,
       }
@@ -272,7 +273,7 @@ router.post('/admin/approve/:id', authenticate, requireAdmin, async (req, res) =
     }
 
     const amountCents = Math.round(payoutReq.amount * 100);
-    const currency = payoutReq.currency || 'usd';
+    const currency = PLATFORM_CURRENCY;
 
     // 1) Transfer funds from platform to connected account balance
     const transfer = await stripe.transfers.create({
@@ -397,7 +398,7 @@ router.post('/request', authenticate, async (req, res) => {
       data: {
         userId,
         amount: Number(requestedAmount.toFixed(2)),
-        currency: 'usd',
+        currency: PLATFORM_CURRENCY,
         status: 'REQUESTED',
         reason: req.body?.reason || null,
       }
@@ -432,7 +433,7 @@ router.post('/requests/:id/approve', authenticate, requireAdmin, async (req, res
     }
 
     const amountCents = Math.round(payoutReq.amount * 100);
-    const currency = payoutReq.currency || 'usd';
+    const currency = PLATFORM_CURRENCY;
 
     // Маркираме като PROCESSING
     await prisma.payoutRequest.update({ where: { id: payoutReq.id }, data: { status: 'PROCESSING' } });

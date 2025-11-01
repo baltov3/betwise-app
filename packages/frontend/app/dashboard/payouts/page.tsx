@@ -7,6 +7,7 @@ import { api } from '../../../lib/api';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { useAuth } from '../../../contexts/AuthContext';
+import { formatCurrency } from './../../../lib/currency';
 
 interface RequestItem {
   id: string;
@@ -91,7 +92,7 @@ export default function UserPayoutsPage() {
       return;
     }
     if (!meetsMin) {
-      toast.error(`Минималната сума за теглене е $${MIN_PAYOUT}.`);
+      toast.error(`Минималната сума за теглене е ${formatCurrency(MIN_PAYOUT)}.`);
       return;
     }
     if (!Number.isFinite(parsedAmount)) {
@@ -99,11 +100,11 @@ export default function UserPayoutsPage() {
       return;
     }
     if (parsedAmount < MIN_PAYOUT) {
-      toast.error(`Минималната сума за теглене е $${MIN_PAYOUT}.`);
+      toast.error(`Минималната сума за теглене е ${formatCurrency(MIN_PAYOUT)}.`);
       return;
     }
     if (parsedAmount > available) {
-      toast.error(`Нямаш достатъчна наличност. Максимум: $${available.toFixed(2)}`);
+      toast.error(`Нямаш достатъчна наличност. Максимум: ${formatCurrency(available)}`);
       return;
     }
 
@@ -133,7 +134,6 @@ export default function UserPayoutsPage() {
     );
   }
 
-  // Визуално „disabled“ (кликаемо за Upsell)
   const visuallyDisabled =
     !subActive ||
     !hasStripe ||
@@ -142,7 +142,6 @@ export default function UserPayoutsPage() {
     parsedAmount < MIN_PAYOUT ||
     parsedAmount > available;
 
-  // Chip helpers
   const chip = (color: 'green' | 'red' | 'blue' | 'amber', text: string) => {
     const colors: Record<string, string> = {
       green: 'bg-green-50 text-green-700 ring-1 ring-green-200',
@@ -186,7 +185,7 @@ export default function UserPayoutsPage() {
       />
 
       <div className="p-4 space-y-6">
-        {/* Хедър с независими лейбъли (Subscription / Stripe / Withdrawals) */}
+        {/* Хедър */}
         <div className="relative overflow-hidden rounded-2xl border border-primary-200/40 bg-gradient-to-r from-primary-50 via-white to-indigo-50 p-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="space-y-1">
@@ -197,18 +196,12 @@ export default function UserPayoutsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Абонамент: зависи само от абонамента */}
               {chip(subActive ? 'green' : 'red', subActive ? 'Subscription: Active' : 'Subscription: Inactive')}
-
-              {/* Stripe: зависи само от Stripe състоянието (независим от абонамента) */}
               {chip(hasStripe ? 'green' : 'red', hasStripe ? 'Stripe статус: Payouts enabled' : 'Stripe статус: Not enabled')}
-
-              {/* Withdrawals Eligibility: комбинираното състояние */}
               {chip(payoutsEligible ? 'green' : 'red', payoutsEligible ? 'Withdrawals: Eligible' : 'Withdrawals: Locked')}
             </div>
           </div>
 
-          {/* Обяснение защо е заключено */}
           {!payoutsEligible && (
             <div className="mt-4 rounded-xl border border-gray-200 bg-white/80 px-4 py-3 text-sm text-gray-700 backdrop-blur">
               <div className="font-semibold text-gray-900 mb-1">Защо тегленето е недостъпно:</div>
@@ -217,32 +210,23 @@ export default function UserPayoutsPage() {
                 {subActive && !hasStripe && <li>Stripe payouts не са активирани. Завърши онбординга в Stripe.</li>}
                 {subActive && hasStripe && !meetsMin && (
                   <li>
-                    Нямаш минимална наличност. Минимум: ${MIN_PAYOUT}. Текущо: ${available.toFixed(2)}.
+                    Нямаш минимална наличност. Минимум: {formatCurrency(MIN_PAYOUT)}. Текущо: {formatCurrency(available)}.
                   </li>
                 )}
               </ul>
               <div className="mt-3 flex flex-wrap gap-2">
                 {!subActive && (
                   <>
-                    <Link
-                      href="/pricing"
-                      className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-primary-500"
-                    >
+                    <Link href="/pricing" className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-primary-500">
                       Виж плановете
                     </Link>
-                    <Link
-                      href="/dashboard/subscription"
-                      className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50"
-                    >
+                    <Link href="/dashboard/subscription" className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50">
                       Управление на абонамент
                     </Link>
                   </>
                 )}
                 {subActive && !hasStripe && (
-                  <Link
-                    href="/dashboard/payouts/onboarding"
-                    className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-indigo-500"
-                  >
+                  <Link href="/dashboard/payouts/onboarding" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow hover:bg-indigo-500">
                     Завърши Stripe онбординг
                   </Link>
                 )}
@@ -251,7 +235,7 @@ export default function UserPayoutsPage() {
           )}
         </div>
 
-        {/* Карти: Subscription / Stripe / Balance */}
+        {/* Карти */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Subscription */}
           <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -261,37 +245,27 @@ export default function UserPayoutsPage() {
             </div>
             {!subActive && (
               <div className="space-x-2">
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-primary-500"
-                >
+                <Link href="/pricing" className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-primary-500">
                   Виж плановете
                 </Link>
-                <Link
-                  href="/dashboard/subscription"
-                  className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50"
-                >
+                <Link href="/dashboard/subscription" className="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-medium text-primary-700 ring-1 ring-primary-200 hover:bg-primary-50">
                   Управление
                 </Link>
               </div>
             )}
           </div>
 
-          {/* Stripe статус — независим от абонамента */}
+          {/* Stripe статус */}
           <div className="rounded-xl border bg-white p-4 shadow-sm">
             <div className="mb-1 text-sm font-medium text-gray-900">Stripe статус</div>
             <div className="mb-3">
               {chip(hasStripe ? 'green' : 'red', hasStripe ? 'Payouts enabled' : 'Payouts not enabled')}
             </div>
             {!hasStripe && (
-              <Link
-                href="/dashboard/payouts/onboarding"
-                className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500"
-              >
+              <Link href="/dashboard/payouts/onboarding" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500">
                 Завърши Stripe онбординг
               </Link>
             )}
-            {/* Подсказка при активен Stripe, но неактивен абонамент */}
             {hasStripe && !subActive && (
               <p className="mt-2 text-xs text-gray-600">
                 Аккаунтът в Stripe е активен, но тегленето е блокирано без активен абонамент.
@@ -306,25 +280,25 @@ export default function UserPayoutsPage() {
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Натрупани</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  ${Number(status?.balance?.earned || 0).toFixed(2)}
+                  {formatCurrency(Number(status?.balance?.earned || 0))}
                 </div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Заключени</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  ${Number(status?.balance?.locked || 0).toFixed(2)}
+                  {formatCurrency(Number(status?.balance?.locked || 0))}
                 </div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Чакащи</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  ${Number(status?.balance?.pending || 0).toFixed(2)}
+                  {formatCurrency(Number(status?.balance?.pending || 0))}
                 </div>
               </div>
               <div className="rounded-lg bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">Налични</div>
                 <div className="text-lg font-semibold text-green-600">
-                  ${available.toFixed(2)}
+                  {formatCurrency(available)}
                 </div>
               </div>
             </div>
@@ -337,12 +311,12 @@ export default function UserPayoutsPage() {
 
           {available < MIN_PAYOUT ? (
             <div className="text-sm text-gray-600">
-              Минималната сума за теглене е ${MIN_PAYOUT}. Текущо налични: ${available.toFixed(2)}.
+              Минималната сума за теглене е {formatCurrency(MIN_PAYOUT)}. Текущо налични: {formatCurrency(available)}.
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <label className="text-sm text-gray-700">
-                Сума за теглене ($)
+                Сума за теглене (EUR)
                 <input
                   type="number"
                   min={MIN_PAYOUT}
@@ -372,8 +346,8 @@ export default function UserPayoutsPage() {
                   className="w-full accent-primary-600"
                 />
                 <div className="mt-1 flex justify-between text-xs text-gray-500">
-                  <span>${MIN_PAYOUT}</span>
-                  <span>${Math.max(MIN_PAYOUT, Math.floor(available))}</span>
+                  <span>{formatCurrency(MIN_PAYOUT)}</span>
+                  <span>{formatCurrency(Math.max(MIN_PAYOUT, Math.floor(available)))}</span>
                 </div>
               </div>
 
@@ -383,7 +357,7 @@ export default function UserPayoutsPage() {
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
                   onClick={() => setQuick(MIN_PAYOUT)}
                 >
-                  ${MIN_PAYOUT}
+                  {formatCurrency(MIN_PAYOUT)}
                 </button>
                 {available >= 50 && (
                   <button
@@ -391,7 +365,7 @@ export default function UserPayoutsPage() {
                     className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
                     onClick={() => setQuick(50)}
                   >
-                    $50
+                    {formatCurrency(50)}
                   </button>
                 )}
                 {available >= 100 && (
@@ -400,7 +374,7 @@ export default function UserPayoutsPage() {
                     className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
                     onClick={() => setQuick(100)}
                   >
-                    $100
+                    {formatCurrency(100)}
                   </button>
                 )}
                 <button
@@ -408,7 +382,7 @@ export default function UserPayoutsPage() {
                   className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50"
                   onClick={() => setQuick(available)}
                 >
-                  Максимум (${available.toFixed(2)})
+                  Максимум ({formatCurrency(available)})
                 </button>
               </div>
 
@@ -421,13 +395,13 @@ export default function UserPayoutsPage() {
                       : !hasStripe
                       ? 'Завърши Stripe онбординга'
                       : !meetsMin
-                      ? `Минимум $${MIN_PAYOUT}`
+                      ? `Минимум ${formatCurrency(MIN_PAYOUT)}`
                       : !Number.isFinite(parsedAmount)
                       ? 'Невалидна сума'
                       : parsedAmount < MIN_PAYOUT
-                      ? `Минимум $${MIN_PAYOUT}`
+                      ? `Минимум ${formatCurrency(MIN_PAYOUT)}`
                       : parsedAmount > available
-                      ? `Максимум $${available.toFixed(2)}`
+                      ? `Максимум ${formatCurrency(available)}`
                       : 'Подай заявка'
                   }
                   className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white transition ${
@@ -479,9 +453,9 @@ export default function UserPayoutsPage() {
                   {requests.map((r, idx) => (
                     <tr key={r.id} className={idx % 2 ? 'bg-white' : 'bg-gray-50/50 hover:bg-gray-50'}>
                       <td className="px-3 py-2">
-                        <span className="font-medium">${r.amount.toFixed(2)}</span>
+                        <span className="font-medium">{formatCurrency(r.amount)}</span>
                       </td>
-                      <td className="px-3 py-2">{r.currency}</td>
+                      <td className="px-3 py-2">{r.currency?.toUpperCase() || 'EUR'}</td>
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
